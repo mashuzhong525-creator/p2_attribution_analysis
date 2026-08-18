@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>经营归因分析系统</title>
+  <style>
+    body { font-family: "Microsoft YaHei", sans-serif; margin: 0; background: #f5f6fa; color: #333; }
+    header { background: #2f54eb; color: #fff; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+    #loginBox { max-width: 320px; margin: 120px auto; background: #fff; padding: 24px; border-radius: 8px; }
+    #app { display: none; }
+    .layout { display: flex; height: calc(100vh - 52px); }
+    .side { width: 240px; background: #fff; border-right: 1px solid #eee; padding: 12px; overflow: auto; }
+    .mid { flex: 1; display: flex; flex-direction: column; padding: 12px; }
+    .right { width: 320px; background: #fff; border-left: 1px solid #eee; padding: 12px; overflow: auto; }
+    #msgs { flex: 1; overflow: auto; background: #fff; border: 1px solid #eee; padding: 12px; }
+    .msg { margin: 8px 0; padding: 8px; border-radius: 6px; white-space: pre-wrap; }
+    .user { background: #e6f4ff; }
+    .ai { background: #f6ffed; }
+    .tool { background: #fffbe6; font-size: 12px; color: #ad6800; }
+    input, textarea, button, select { font-size: 14px; padding: 6px 10px; margin: 4px; }
+    textarea { width: 100%; height: 60px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #eee; padding: 6px 8px; font-size: 12px; text-align: left; }
+    .conv { padding: 8px; border: 1px solid #eee; border-radius: 4px; margin: 6px 0; cursor: pointer; }
+    .conv.active { border-color: #2f54eb; background: #f0f5ff; }
+    #err { color: #cf1322; }
+  </style>
+</head>
+<body>
+  <div id="loginBox">
+    <h2>经营归因分析系统</h2>
+    <input id="u" placeholder="用户名" /><br />
+    <input id="p" type="password" placeholder="密码" /><br />
+    <button onclick="login()">登录</button><span id="err"></span>
+  </div>
+
+  <div id="app">
+    <header>
+      <span>经营归因分析系统（双碳/通用经营）</span>
+      <span id="who"></span><button onclick="logout()">退出</button>
+    </header>
+    <div class="layout">
+      <div class="side">
+        <h4>会话</h4>
+        <input id="title" placeholder="会话标题" />
+        <button onclick="createConv()">新建</button>
+        <div id="convList"></div>
+      </div>
+      <div class="mid">
+        <div id="msgs">选择一个会话开始提问（示例：为什么 7 月华东仓库存周转率下降？）</div>
+        <div style="display:flex;align-items:center">
+          <input id="q" style="flex:1" placeholder="输入业务问题" />
+          <button onclick="send()">发送</button>
+          <input id="file" type="file" style="width:120px" />
+          <button onclick="upload()">附件</button>
+        </div>
+      </div>
+      <div class="right">
+        <h4>分析结果</h4>
+        <div id="result">等待分析……</div>
+        <button onclick="exportR('md')">导出 Markdown</button>
+        <button onclick="exportR('json')">导出 JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let token = localStorage.getItem("p2_token") || "";
+    let ws = null;
+    let convId = null;
+    let lastTaskId = null;
+
+    async function api(path, opts = {}) {
+      opts.headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+      if (token) opts.headers["Authorization"] = "Bearer " + token;
+      const r = await fetch(path, opts);
+      if (r.status === 401) { logout(); throw new Error("未登录"); }
+      return r.json();
+    }
+
+    async function login() {
+      const r = await fetch("/api/auth/login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: u.value, password: p.value })
+      });
+      if (!r.ok) { err.textContent = "登录失败"; return; }
+      const d = await r.json();
+      token = d.token; localStorage.setItem("p2_token", token);
+      document.getElementById("loginBox").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      document.getElementById("who").textContent = d.user_info.display_name;
+      loadConvs();
+    }
+
+    function logout() { token = ""; localStorage.removeItem("p2_token"); location.reload(); }
+
+    async function loadConvs() {
+      const d = await api("/api/chat/ls");
+      const box = document.getElementById("convList");
+      box.innerHTML = "";
+      d.forEach(c => {
+        const div = document.createElement("div");
+        div.className = "conv" + (c.id === convId ? " active" : "");
+        div.textContent = c.title + "（" + c.status + "）";
+        div.onclick = () => openConv(c.id);
+        box.appendChild(div);
+      });
+    }
+
+    async function createConv() {
+      const title = document.getElementById("title").value || "新会话";
+      const d = await api("/api/chat/create", { method: "POST", body: JSON.stringify({ title }) });
+      document.getElementById("title").value = "";
+      openConv(d.id);
+      loadConvs();
+    }
+
+    async function openConv(id) {
+      convId = id; lastTaskId = null;
+      if (ws) { ws.close(); ws = null; }
+      const msgs = await api("/api/chat/ls/" + id);
+      const box = document.getElementById("msgs");
+      box.innerHTML = "";
+      msgs.forEach(m => {
+        const div = document.createElement("div");
+        div.className = "msg " + (m.role === "user" ? "user" : "ai");
+        div.textContent = (m.role === "user" ? "我：" : "助手：") + m.content;
+        box.appendChild(div);
+      });
+      document.getElementById("result").textContent = "等待分析……";
+      loadConvs();
+      connectWs(id);
+    }
+
+    async function connectWs(id) {
+      const d = await api("/api/chat/ws-token", { method: "POST", body: JSON.stringify({ conversation_id: id }) });
+      ws = new WebSocket(`ws://${location.host}/api/chat/ws/chat?token=${d.websocket_token}&conversation_id=${id}`);
+      ws.onmessage = evt => handleEvent(JSON.parse(evt.data));
+      ws.onclose = () => { ws = null; };
+    }
+
+    function handleEvent(evt) {
+      const box = document.getElementById("msgs");
+      const res = document.getElementById("result");
+      if (evt.event === "task_status") {
+        box.insertAdjacentHTML("beforeend", '<div class="tool">[任务] ' + evt.task_status + '</div>');
+      } else if (evt.event === "tool_start") {
+        box.insertAdjacentHTML("beforeend", '<div class="tool">[工具] 开始：' + evt.tool_name + '</div>');
+      } else if (evt.event === "tool_finish") {
+        box.insertAdjacentHTML("beforeend", '<div class="tool">[工具] 完成：' + evt.tool_name + ' → ' + (evt.tool_result_summary || "") + '</div>');
+      } else if (evt.event === "message_delta") {
+        let ai = box.querySelector(".msg.ai:last-child");
+        if (!ai) { ai = document.createElement("div"); ai.className = "msg ai"; box.appendChild(ai); }
+        ai.textContent += evt.delta;
+      } else if (evt.event === "result_ready") {
+        lastTaskId = evt.task_id;
+        loadResult(evt.task_id);
+      } else if (evt.event === "error") {
+        box.insertAdjacentHTML("beforeend", '<div class="tool">[错误] ' + (evt.error_message || "") + '</div>');
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function send() {
+      const question = document.getElementById("q").value;
+      if (!question || !ws || !convId) return;
+      document.getElementById("msgs").insertAdjacentHTML("beforeend", '<div class="msg user">我：' + question + '</div>');
+      ws.send(JSON.stringify({ type: "question", question }));
+      document.getElementById("q").value = "";
+    }
+
+    async function loadResult(taskId) {
+      const d = await api("/api/results/" + taskId);
+      const res = document.getElementById("result");
+      let html = "<b>问题定义：</b>" + d.problem_definition + "<hr>";
+      html += "<b>关键指标：</b><br>" + (d.key_metrics || []).map(m => m.metric_name + "：" + m.metric_value + m.metric_unit).join("<br>") + "<hr>";
+      html += "<b>证据列表：</b><br>" + (d.evidence_list || []).map(e => "[" + e.source_name + "] " + e.evidence_text).join("<br>") + "<hr>";
+      html += "<b>归因结论：</b><br>" + d.conclusion_text + "<hr>";
+      html += "<b>待补充数据：</b><br>" + d.missing_data_text + "<hr>";
+      html += "<b>下一步建议：</b><br>" + (d.next_action_text || []).map(a => "· " + a).join("<br>");
+      res.innerHTML = html;
+    }
+
+    async function exportR(fmt) {
+      if (!lastTaskId) return;
+      window.open("/api/results/" + lastTaskId + "/export?format=" + fmt, "_blank");
+    }
+
+    async function upload() {
+      const f = document.getElementById("file").files[0];
+      if (!f || !convId) return;
+      const fd = new FormData();
+      fd.append("conversation_id", convId);
+      fd.append("file", f);
+      await fetch("/api/attachment/upload", { method: "POST", headers: { "Authorization": "Bearer " + token }, body: fd });
+      document.getElementById("file").value = "";
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>经营归因分析系统 - 页面原型图</title>
+<style>
+  /* ============ 原型图全局样式 ============ */
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  body { background: #eef1f6; padding: 24px; }
+  .proto-title { text-align: center; font-size: 22px; color: #1f2d3d; margin-bottom: 8px; }
+  .proto-sub { text-align: center; font-size: 13px; color: #8492a6; margin-bottom: 28px; }
+  .section-label { background: #409eff; color: #fff; display: inline-block; padding: 4px 14px; border-radius: 4px; font-size: 14px; margin: 24px 0 12px; }
+  .frame { border: 2px dashed #b3d8ff; border-radius: 8px; background: #fff; overflow: hidden; }
+  .note { font-size: 12px; color: #909399; margin-top: 6px; padding-left: 4px; }
+
+  /* ============ 通用组件样式 ============ */
+  .btn { display: inline-block; padding: 8px 18px; border-radius: 4px; font-size: 13px; cursor: pointer; border: none; }
+  .btn-primary { background: #409eff; color: #fff; }
+  .btn-danger { background: #fef0f0; color: #f56c6c; border: 1px solid #fbc4c4; }
+  .btn-default { background: #fff; color: #606266; border: 1px solid #dcdfe6; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; }
+  .tag-blue { background: #ecf5ff; color: #409eff; }
+  .tag-green { background: #f0f9eb; color: #67c23a; }
+  .tag-red { background: #fef0f0; color: #f56c6c; }
+  .tag-orange { background: #fdf6ec; color: #e6a23c; }
+  .tag-gray { background: #f4f4f5; color: #909399; }
+  .input { border: 1px solid #dcdfe6; border-radius: 4px; padding: 8px 12px; font-size: 13px; color: #606266; width: 100%; }
+
+  /* ============ P1 登录页 ============ */
+  .login-wrap { height: 420px; background: linear-gradient(135deg, #1f2d3d 0%, #2d3a4b 60%, #409eff 100%); display: flex; align-items: center; justify-content: center; position: relative; }
+  .login-card { background: #fff; border-radius: 10px; padding: 36px 40px; width: 360px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+  .login-card h2 { font-size: 20px; color: #303133; text-align: center; margin-bottom: 6px; }
+  .login-card .sub { font-size: 12px; color: #909399; text-align: center; margin-bottom: 24px; }
+  .login-card .field { margin-bottom: 16px; }
+  .login-card label { display: block; font-size: 12px; color: #606266; margin-bottom: 6px; }
+  .login-btn { width: 100%; padding: 11px; font-size: 15px; margin-top: 8px; }
+  .login-tip { margin-top: 14px; text-align: center; font-size: 12px; color: #a0cfff; position: absolute; bottom: 18px; width: 100%; }
+
+  /* ============ P2 聊天工作台 ============ */
+  .workbench { display: grid; grid-template-columns: 240px 1fr 340px; grid-template-rows: 52px 1fr 76px; height: 720px; }
+  .topbar { grid-column: 1 / 4; background: #1f2d3d; display: flex; align-items: center; padding: 0 20px; gap: 14px; }
+  .topbar .logo { color: #fff; font-size: 16px; font-weight: bold; }
+  .topbar .spacer { flex: 1; }
+  .topbar .user-chip { color: #d3dce6; font-size: 13px; background: rgba(255,255,255,.08); padding: 5px 12px; border-radius: 14px; }
+  .topbar .logout { color: #f56c6c; font-size: 13px; cursor: pointer; }
+
+  /* 左侧会话列表 */
+  .sidebar { background: #fff; border-right: 1px solid #e4e7ed; padding: 12px; overflow-y: auto; }
+  .sidebar .new-btn { width: 100%; margin-bottom: 12px; padding: 9px; }
+  .conv-item { padding: 10px 12px; border-radius: 6px; margin-bottom: 6px; cursor: pointer; position: relative; }
+  .conv-item .t { font-size: 13px; color: #303133; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv-item .d { font-size: 11px; color: #909399; margin-top: 3px; }
+  .conv-item:hover { background: #f5f7fa; }
+  .conv-item.active { background: #ecf5ff; }
+  .conv-item .ops { position: absolute; right: 8px; top: 10px; font-size: 11px; color: #c0c4cc; display: none; }
+  .conv-item:hover .ops { display: block; }
+
+  /* 中间对话区 */
+  .chat-area { display: flex; flex-direction: column; background: #f7f8fa; }
+  .chat-head { padding: 12px 20px; background: #fff; border-bottom: 1px solid #e4e7ed; display: flex; align-items: center; gap: 10px; }
+  .chat-head .name { font-size: 15px; font-weight: bold; color: #303133; }
+  .chat-body { flex: 1; overflow-y: auto; padding: 18px 22px; }
+  .msg { display: flex; margin-bottom: 18px; gap: 10px; }
+  .msg .avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #fff; }
+  .msg.user { flex-direction: row-reverse; }
+  .msg.user .avatar { background: #409eff; }
+  .msg.assistant .avatar { background: #67c23a; }
+  .msg .bubble { max-width: 72%; padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.7; }
+  .msg.user .bubble { background: #409eff; color: #fff; border-top-right-radius: 2px; }
+  .msg.assistant .bubble { background: #fff; color: #303133; border: 1px solid #ebeef5; border-top-left-radius: 2px; }
+
+  /* 实时任务状态条（对话区内嵌） */
+  .task-strip { background: #fff; border: 1px solid #ebeef5; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; }
+  .task-strip .row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .task-strip .step-chain { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #909399; flex-wrap: wrap; }
+  .task-strip .step { padding: 3px 10px; border-radius: 10px; background: #f4f4f5; }
+  .task-strip .step.running { background: #ecf5ff; color: #409eff; }
+  .task-strip .step.done { background: #f0f9eb; color: #67c23a; }
+  .task-strip .arrow { color: #c0c4cc; }
+  .tool-line { font-size: 12px; color: #606266; padding: 3px 0 3px 16px; position: relative; }
+  .tool-line::before { content: "▸"; position: absolute; left: 2px; color: #409eff; }
+  .tool-line .ok { color: #67c23a; }
+  .tool-line .run { color: #e6a23c; }
+
+  /* 底部输入区 */
+  .input-bar { grid-column: 2 / 3; background: #fff; border-top: 1px solid #e4e7ed; padding: 12px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .input-bar textarea { width: 100%; height: 40px; border: 1px solid #dcdfe6; border-radius: 6px; padding: 9px 12px; font-size: 13px; resize: none; }
+  .input-bar .bar-ops { display: flex; justify-content: space-between; align-items: center; }
+  .input-bar .left-ops { font-size: 12px; color: #909399; display: flex; gap: 14px; }
+
+  /* 右侧面板（附件+结果） */
+  .right-panel { grid-row: 2 / 4; background: #fff; border-left: 1px solid #e4e7ed; display: flex; flex-direction: column; }
+  .panel-tabs { display: flex; border-bottom: 1px solid #e4e7ed; }
+  .panel-tabs .ptab { flex: 1; text-align: center; padding: 11px 0; font-size: 13px; color: #606266; cursor: pointer; }
+  .panel-tabs .ptab.active { color: #409eff; border-bottom: 2px solid #409eff; font-weight: bold; }
+  .panel-body { flex: 1; overflow-y: auto; padding: 14px; }
+
+  /* 附件卡片 */
+  .att-card { border: 1px solid #ebeef5; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; }
+  .att-card .r1 { display: flex; align-items: center; gap: 8px; }
+  .att-card .icon { width: 30px; height: 34px; background: #ecf5ff; color: #409eff; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .att-card .meta { flex: 1; min-width: 0; }
+  .att-card .name { font-size: 12px; color: #303133; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .att-card .info { font-size: 11px; color: #909399; margin-top: 2px; }
+  .att-card .ops { display: flex; gap: 8px; font-size: 12px; color: #409eff; }
+
+  /* 结果展示区（六维结构） */
+  .result-block { margin-bottom: 14px; }
+  .result-block h4 { font-size: 13px; color: #1f2d3d; padding: 6px 10px; background: #f5f7fa; border-left: 3px solid #409eff; border-radius: 0 4px 4px 0; margin-bottom: 8px; }
+  .metric-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .metric-table th, .metric-table td { border: 1px solid #ebeef5; padding: 5px 8px; text-align: left; color: #606266; }
+  .metric-table th { background: #fafafa; color: #909399; }
+  .evd-item { font-size: 12px; color: #606266; background: #fafbfc; border: 1px solid #f0f2f5; border-radius: 5px; padding: 8px 10px; margin-bottom: 6px; line-height: 1.6; }
+  .evd-item .src { font-size: 11px; color: #409eff; margin-bottom: 3px; }
+  .res-text { font-size: 12px; color: #606266; line-height: 1.8; }
+  .res-text li { margin-left: 16px; margin-bottom: 3px; }
+  .result-ops { display: flex; gap: 8px; margin: 4px 0 14px; }
+  .result-ops .btn { padding: 5px 12px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="proto-title">经营归因分析系统 · 页面原型图</div>
+<div class="proto-sub">P1 授权登录页 → P2 聊天工作台（会话列表 + 对话区 + 实时任务区 + 附件侧栏 + 结果展示区）</div>
+
+<!-- ================= P1 登录页 ================= -->
+<div class="section-label">P1 授权登录入口页</div>
+<div class="frame">
+  <div class="login-wrap">
+    <div class="login-card">
+      <h2>经营归因分析系统</h2>
+      <div class="sub">Attribution Analysis Platform</div>
+      <div class="field">
+        <label>用户名</label>
+        <input class="input" placeholder="请输入用户名" value="admin">
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input class="input" type="password" placeholder="请输入密码" value="••••••••">
+      </div>
+      <button class="btn btn-primary login-btn">登 录</button>
+      <div style="text-align:center;margin-top:12px;font-size:12px;color:#909399;">
+        演示账号：admin / admin123
+      </div>
+    </div>
+    <div class="login-tip">登录成功后自动跳转聊天工作台 · 登录回调处理见 P2</div>
+  </div>
+</div>
+<div class="note">说明：点击登录 → 调用 POST /api/auth/login → 保存 access_token 至 localStorage → 跳转工作台（等效授权回调流程）。</div>
+
+<!-- ================= P2 聊天工作台 ================= -->
+<div class="section-label">P2 聊天工作台页（三栏布局：左=会话列表，中=对话区+输入框，右=附件侧栏/结果展示区）</div>
+<div class="frame">
+  <div class="workbench">
+
+    <!-- 顶栏 -->
+    <div class="topbar">
+      <span class="logo">📊 经营归因分析系统</span>
+      <span class="tag tag-blue" style="background:rgba(64,158,255,.2);color:#a0cfff;">WebSocket 已连接</span>
+      <span class="spacer"></span>
+      <span class="user-chip">👤 admin（管理员）</span>
+      <span class="logout">退出</span>
+    </div>
+
+    <!-- 左：会话列表 -->
+    <div class="sidebar">
+      <button class="btn btn-primary new-btn">＋ 新建会话</button>
+
+      <div class="conv-item active">
+        <div class="t">7月库存异常分析</div>
+        <div class="d">2026-08-15 · 3轮对话</div>
+        <div class="ops">✏️ 🗑</div>
+      </div>
+      <div class="conv-item">
+        <div class="t">客户转化率下降归因</div>
+        <div class="d">2026-08-14 · 5轮对话</div>
+        <div class="ops">✏️ 🗑</div>
+      </div>
+      <div class="conv-item">
+        <div class="t">东仓周转率排查</div>
+        <div class="d">2026-08-12 · 2轮对话</div>
+        <div class="ops">✏️ 🗑</div>
+      </div>
+      <div class="conv-item">
+        <div class="t">月度销售复盘</div>
+        <div class="d">2026-08-10 · 1轮对话</div>
+        <div class="ops">✏️ 🗑</div>
+      </div>
+    </div>
+
+    <!-- 中：对话区 -->
+    <div class="chat-area">
+      <div class="chat-head">
+        <span class="name">7月库存异常分析</span>
+        <span class="tag tag-green">active</span>
+        <span class="spacer" style="flex:1"></span>
+        <span class="tag tag-gray">会话 #12</span>
+      </div>
+
+      <div class="chat-body">
+        <!-- 用户消息 -->
+        <div class="msg user">
+          <div class="avatar">我</div>
+          <div class="bubble">分析7月东仓库存积压的原因，对比近3个月数据</div>
+        </div>
+
+        <!-- 实时任务区（内嵌于对话流） -->
+        <div class="task-strip">
+          <div class="row1">
+            <span class="tag tag-blue">任务 #8</span>
+            <span class="tag tag-green">running</span>
+            <span style="font-size:12px;color:#606266;">当前步骤：生成归因结论</span>
+          </div>
+          <div class="step-chain">
+            <span class="step done">任务启动</span><span class="arrow">→</span>
+            <span class="step done">生成SQL</span><span class="arrow">→</span>
+            <span class="step done">执行查询</span><span class="arrow">→</span>
+            <span class="step running">生成归因结论</span><span class="arrow">→</span>
+            <span class="step">保存结果</span>
+          </div>
+          <div class="tool-line">🔧 sql_generation <span class="ok">✓ 完成</span> — SQL: SELECT warehouse, strftime('%Y-%m'...</div>
+          <div class="tool-line">🔧 sql_execution <span class="ok">✓ 完成</span> — 返回 12 行 × 5 列</div>
+          <div class="tool-line">🔧 attribution_generation <span class="run">⟳ 执行中</span></div>
+        </div>
+
+        <!-- 助手消息（流式） -->
+        <div class="msg assistant">
+          <div class="avatar">AI</div>
+          <div class="bubble">根据查询数据分析，7月东仓库存周转率降至1.2次/月（环比下降42%），库存量较6月增长60%，主因是入库量增加56%的同时出库量骤降51%，而同期销量仅下降18%…<span style="color:#c0c4cc;">▌</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 中下：输入区 -->
+    <div class="input-bar">
+      <textarea placeholder="输入分析问题，例如：分析7月东仓库存积压的原因，对比近3个月数据…（Enter发送 / Shift+Enter换行）"></textarea>
+      <div class="bar-ops">
+        <div class="left-ops">
+          <span>📎 上传附件</span>
+          <span>🛑 取消分析</span>
+        </div>
+        <button class="btn btn-primary" style="padding:7px 22px;">发 送 ➤</button>
+      </div>
+    </div>
+
+    <!-- 右：附件侧栏 / 结果展示区（Tab切换） -->
+    <div class="right-panel">
+      <div class="panel-tabs">
+        <div class="ptab">📁 附件 (2)</div>
+        <div class="ptab active">📋 分析结果</div>
+      </div>
+
+      <div class="panel-body">
+        <!-- ===== 结果展示区（六维结构） ===== -->
+        <div class="result-ops">
+          <button class="btn btn-default">📋 复制</button>
+          <button class="btn btn-default">⬇ 导出MD</button>
+          <button class="btn btn-default">⬇ 导出JSON</button>
+        </div>
+
+        <div class="result-block">
+          <h4>① 问题定义</h4>
+          <div class="res-text">分析2026年7月东仓库存积压原因，对比5-7月库存、出入库与销量数据。</div>
+        </div>
+
+        <div class="result-block">
+          <h4>② 关键指标</h4>
+          <table class="metric-table">
+            <tr><th>指标</th><th>值</th><th>单位</th><th>周期</th></tr>
+            <tr><td>库存周转率</td><td style="color:#f56c6c;">1.2 ↓42%</td><td>次/月</td><td>2026-07</td></tr>
+            <tr><td>库存量</td><td style="color:#f56c6c;">8,420 ↑60%</td><td>件</td><td>2026-07</td></tr>
+            <tr><td>周转天数</td><td style="color:#f56c6c;">25.0 ↑72%</td><td>天</td><td>2026-07</td></tr>
+          </table>
+        </div>
+
+        <div class="result-block">
+          <h4>③ 证据列表</h4>
+          <div class="evd-item">
+            <div class="src">📦 database · inventory表</div>
+            东仓7月平均库存8,420件，6月为5,263件，环比+60%
+          </div>
+          <div class="evd-item">
+            <div class="src">📦 database · outbound表</div>
+            东仓7月出库量4,100件，6月为8,367件，环比-51%
+          </div>
+          <div class="evd-item">
+            <div class="src">📄 file · 补充说明.csv</div>
+            7月东仓促销活动取消，渠道订单转向南仓
+          </div>
+        </div>
+
+        <div class="result-block">
+          <h4>④ 归因结论</h4>
+          <div class="res-text">7月东仓库存积压的主因是<b>出库量骤降51%</b>（渠道订单转移至南仓），叠加<b>入库计划未同步下调</b>（入库量仍增加56%），供需双向失衡导致库存周转率从2.1降至1.2，周转天数拉长至25天，占压资金约180万元。</div>
+        </div>
+
+        <div class="result-block">
+          <h4>⑤ 待补充数据</h4>
+          <div class="res-text">
+            <li>供应商交货提前期数据（判断入库计划合理性）</li>
+            <li>渠道订单转移的商务原因说明</li>
+          </div>
+        </div>
+
+        <div class="result-block">
+          <h4>⑥ 下一步建议</h4>
+          <div class="res-text">
+            <li>1. 立即下调东仓8月入库计划30%，与渠道订单分布对齐</li>
+            <li>2. 对东仓高库存SKU启动跨仓调拨或促销清库</li>
+            <li>3. 建立周级库存周转监控看板，设置环比±30%预警</li>
+          </div>
+        </div>
+
+        <!-- ===== 附件侧栏（Tab2内容，原型中隐藏示意） =====
+        <div class="att-card">
+          <div class="r1">
+            <div class="icon">CSV</div>
+            <div class="meta">
+              <div class="name">东仓库存明细_202607.csv</div>
+              <div class="info">2.4 KB · CSV · 2026-08-15 · <span class="tag tag-green">已解析</span></div>
+            </div>
+            <div class="ops"><span>⬇</span><span style="color:#f56c6c;">🗑</span></div>
+          </div>
+        </div>
+        <div class="att-card">
+          <div class="r1">
+            <div class="icon">MD</div>
+            <div class="meta">
+              <div class="name">补充说明.md</div>
+              <div class="info">1.1 KB · Markdown · 2026-08-15 · <span class="tag tag-orange">解析中</span></div>
+            </div>
+            <div class="ops"><span>⬇</span><span style="color:#f56c6c;">🗑</span></div>
+          </div>
+        </div>
+        <button class="btn btn-default" style="width:100%;border-style:dashed;">＋ 上传附件（CSV/MD/TXT/PDF）</button>
+        -->
+      </div>
+    </div>
+
+  </div>
+</div>
+<div class="note">
+  说明：① 左栏会话支持新建/重命名(✏️)/删除(🗑)，按最近活跃排序；② 中栏对话流内嵌"实时任务区"——展示任务状态、步骤链（任务启动→生成SQL→执行查询→生成归因结论→保存结果）、每个工具的执行过程与结果摘要；③ 右栏Tab1=附件侧栏（文件名/类型/大小/上传时间/解析状态 + 上传/删除/下载），Tab2=结果展示区（六维结构 + 复制/导出MD/导出JSON）；④ 底部输入框支持附件上传与取消分析；⑤ 所有实时更新经 WebSocket 推送（message_start/tool_start/tool_finish/message_delta/task_status/result_ready/error/done）。
+</div>
+
+</body>
+</html>

@@ -1,0 +1,24 @@
+version: "3.8"
+
+# 最小可跑版：仅业务服务（SQLite 演示数据卷持久化）
+services:
+  kb-p2-app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: kb-p2:latest
+    container_name: kb-p2-app
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./volumes/data:/app/data
+      - ./volumes/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

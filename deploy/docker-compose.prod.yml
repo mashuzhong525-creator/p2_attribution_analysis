@@ -1,0 +1,32 @@
+version: "3.8"
+
+# 生产参考版：业务服务 + 资源约束
+# 说明：当前演示数据为 SQLite（数据卷持久化）；
+#       生产可进一步扩展 PostgreSQL/Redis 等（需新增对应适配器）。
+services:
+  kb-p2-app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: kb-p2:latest
+    container_name: kb-p2-app-prod
+    restart: always
+    env_file:
+      - .env.prod
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./volumes/data:/app/data
+      - ./volumes/logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+        reservations:
+          memory: 512m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
