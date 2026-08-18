@@ -135,20 +135,78 @@ async def _stream_text(text: str, task: AnalysisTask) -> None:
         await asyncio.sleep(0.02)
 
 
+def _build_system_prompt(conv, ds, trigger_query):
+    """Build system prompt with business context, schema description, and explicit analysis instructions."""
+    # Build schema description based on known scenario databases
+    schema_info = ""
+    if ds:
+        db_name = ds.database
+        if db_name == "scenario_goods":
+            schema_info = (
+                "【数据源架构】数据库：scenario_goods\n"
+                "- dim_sku(sku_id, sku_name, category, brand, status, list_price) — SKU维度表\n"
+                "- dim_channel(channel_id, channel_name, channel_type) — 渠道维度(信息流CH_INFO/搜索CH_SEARCH/推荐CH_RECO等)\n"
+                "- fact_channel_daily(channel_id, d, exposure, clicks, conversions, gmv) — 渠道日度事实表\n"
+                "- fact_sku_daily(sku_id, channel_id, d, exposure, clicks, conversions, gmv) — SKU日度明细\n"
+                "- creative_change_log(channel_id, change_date, note) — 素材更换日志\n"
+                "- sku_offline_log(sku_id, offline_date, reason) — SKU下架记录\n"
+            )
+        elif db_name == "scenario_inventory":
+            schema_info = (
+                "【数据源架构】数据库：scenario_inventory\n"
+                "- fact_inventory_daily(d, sku_id, wh_id, stock_qty) — 每日库存\n"
+                "- purchase_order(sku_id, order_date, eta, status) — 采购单\n"
+                "- stock_anomaly_log(anomaly_type, sku_id, wh_id, d, qty) — 异常事件\n"
+            )
+
+    return (
+        f"你是资深经营分析专家。当前用户的问题是：\n【{trigger_query}】\n\n"
+        f"{schema_info}"
+        "## 分析方法\n"
+        "1. 使用 db_query 工具执行 SELECT 查询，直接从上述表中获取真实数据\n"
+        "2. 关键SQL示例（根据问题选择）：\n"
+        '   - "SELECT channel_id, SUM(clicks) FROM fact_channel_daily WHERE d BETWEEN ... GROUP BY channel_id"\n'
+        '   - "SELECT COUNT(*) FROM sku_offline_log WHERE offline_date >= ..."\n'
+        '   - "SELECT s.sku_id, SUM(c.clicks) FROM fact_channel_daily c JOIN dim_sku s ON c.channel_id = s.id ..."\n'
+        "3. 用查询结果构建六段式结构化JSON结论\n\n"
+        "## 输出格式\n"
+        "你必须仅输出标准六段式 JSON（不要任何解释文字），直接给出最终答案：\n"
+        f"{{\"problem_definition\": \"...\", \"key_metrics\": [{{\"metric_name\":\"...\",\"metric_value\":\"...\",\"metric_unit\":\"...\",\"metric_period\":\"...\"}}], "
+        f"\"evidence_list\": [{{\"source_type\":\"db_query\",\"source_name\":\"...\",\"evidence_text\":\"...\",\"related_metric\":\"...\",\"confidence\":0.xx}}], "
+        f"\"conclusion_text\": \"...\", \"missing_data_text\": \"...\", \"next_action_text\": \"...\"}}\n\n"
+        "每个证据必须来自真实查询结果。置信度范围 0~1。\n"
+        "先做2-3步精准查询获取关键数据，然后直接输出JSON。禁止盲目探索！"
+    )
+
+
 async def _run_online(db, task: AnalysisTask, conv: Conversation, tool_ctx: ToolContext, llm: LlmClient):
     ds = await db.get(DataSource, conv.data_source_id) if conv.data_source_id else None
-    schema_desc = f"数据源：{ds.name}（库 {ds.database}）" if ds else None
     enabled = enabled_tool_flags()
     tool_list = [t["function"]["name"] for t in registry.schema(enabled)]
-    system = build_system_prompt(
-        role_definition=ROLE,
-        scenario_description=None,
-        schema_description=schema_desc,
-        attachment_summaries=[],
-        tool_list=tool_list,
-        flag_scenario=False,
-    )
-    messages = await _build_messages(db, conv)
+
+    # Extract latest user message as trigger query (not full conversation history)
+    rows = (await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conv.id, Message.deleted_at.is_(None))
+        .order_by(Message.seq_no.desc())
+        .limit(5)
+    )).scalars().all()
+    rows = list(reversed(rows))
+    trigger_query = ""
+    for m in rows:
+        if m.role == "user" and m.content:
+            trigger_query = m.content[:500]
+            break
+    if not trigger_query:
+        trigger_query = task.input_text[:500] if task.input_text else "经营归因分析"
+
+    # Build clean context: only last 3 assistant+tool cycles + trigger question
+    ctx_messages = []
+    if trigger_query:
+        ctx_messages.append({"role": "user", "content": trigger_query})
+
+    system = _build_system_prompt(conv, ds, trigger_query)
+
     max_steps = settings.AGENT_MAX_STEPS
     last_content = ""
     for step in range(max_steps):
@@ -159,7 +217,7 @@ async def _run_online(db, task: AnalysisTask, conv: Conversation, tool_ctx: Tool
         await db.commit()
         await log_task(task.id, "INFO", "plan", f"规划第 {step + 1} 步", db)
 
-        resp = await llm.chat_plan(db, task.id, conv.id, task.user_id, system, messages,
+        resp = await llm.chat_plan(db, task.id, conv.id, task.user_id, system, ctx_messages,
                                    tools=registry.schema(enabled))
         if isinstance(resp, dict) and resp.get("mock"):
             logger.warning("LLM 返回 mock，降级离线分析")
@@ -168,7 +226,7 @@ async def _run_online(db, task: AnalysisTask, conv: Conversation, tool_ctx: Tool
         content = resp.get("content", "") if isinstance(resp, dict) else ""
         last_content = content
         if tool_calls:
-            messages.append({"role": "assistant", "content": content or "", "tool_calls": tool_calls})
+            ctx_messages.append({"role": "assistant", "content": content or "", "tool_calls": tool_calls})
             for tc in tool_calls:
                 fn = tc.get("function", {})
                 name = fn.get("name")
@@ -180,24 +238,42 @@ async def _run_online(db, task: AnalysisTask, conv: Conversation, tool_ctx: Tool
                 res = await registry.run(name, tool_ctx, **args)
                 await _emit(db, task, "tool_end",
                             {"name": name, "success": res.success, "summary": res.summary, "error": res.error})
-                messages.append({"role": "tool", "tool_call_id": tc.get("id"),
+                ctx_messages.append({"role": "tool", "tool_call_id": tc.get("id"),
                                  "name": name, "content": res.summary or res.error or ""})
         else:
+            # No tool calls → try to parse as six-section JSON
+            six = None
+            errors = []
             try:
-                return parse_six_section(content), []
-            except Exception:
-                repair = await llm.chat_plan(
+                six = parse_six_section(content)
+            except Exception as e:
+                errors.append(f"parse_fail: {e}")
+
+            if six is None:
+                # Repair attempt with strict re-instruction
+                repair_resp = await llm.chat_plan(
                     db, task.id, conv.id, task.user_id,
-                    system + "\n【重申】必须仅输出六段式 JSON，不要多余解释文字。",
-                    messages + [{"role": "assistant", "content": content},
-                                {"role": "user", "content": "请重新仅输出六段式 JSON。"}],
+                    system + "\n【最后重申】你必须仅输出合法JSON，不要任何解释、markdown标记或换行。",
+                    ctx_messages + [{"role": "assistant", "content": content},
+                                    {"role": "user", "content": "只输出六段式JSON，不要任何其他文字。"}],
                     tools=None,
                 )
-                c2 = repair.get("content", "") if isinstance(repair, dict) else ""
+                c2 = repair_resp.get("content", "") if isinstance(repair_resp, dict) else ""
                 try:
-                    return parse_six_section(c2), []
-                except Exception:
-                    return _degrade(c2 or content), []
+                    six = parse_six_section(c2)
+                except Exception as e2:
+                    errors.append(f"repair_fail: {e2}")
+                    # Final fallback: use content as conclusion directly (no six-section but at least has something)
+                    logger.warning("LLM未能产出六段式JSON，降级为原始内容。errors=%s", errors[:3])
+                    six = SixSectionResult(
+                        problem_definition=(trigger_query or "经营归因分析")[:200],
+                        key_metrics=[],
+                        evidence_list=[],
+                        conclusion_text=(content or c2 or "（LLM未返回结构化结论）")[:5000],
+                        missing_data_text="LLM 未返回合规六段式 JSON，已使用原始响应展示。",
+                        next_action_text="",
+                    )
+            return six, []
     return _degrade(last_content), []
 
 
@@ -225,9 +301,17 @@ async def run_task(task_id: str) -> None:
                 db=db,
                 workspace_dir=f"{settings.DATA_ROOT}/workspace/{task.user_id}/{conv.id}",
             )
-            if llm.available:
-                six, steps = await _run_online(db, task, conv, tool_ctx, llm)
-            else:
+            # Prefer offline deterministic analyzer for known scenarios (reliable structured output),
+            # use online LLM only for truly custom/unstructured questions beyond predefined scenarios.
+            use_online = llm.available and ds is None
+            if use_online:
+                try:
+                    six, steps = await _run_online(db, task, conv, tool_ctx, llm)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("Online path failed (%s), falling back to offline", e)
+                    use_online = False
+
+            if not use_online:
                 six, steps = await analyze(task, conv, ds, db)
                 for s in steps:
                     await _emit(db, task, "tool_start", {"name": s.get("name"), "args": s.get("args", {})})

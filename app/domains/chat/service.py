@@ -50,7 +50,11 @@ async def list_for_user(db, user_id: str, page: int, page_size: int) -> tuple[li
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
     rows = (
         await db.execute(
-            base.order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc())
+            base.order_by(
+                Conversation.last_message_at.is_(None).asc(),
+                Conversation.last_message_at.desc(),
+                Conversation.created_at.desc(),
+            )
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
