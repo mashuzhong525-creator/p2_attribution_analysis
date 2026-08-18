@@ -25,6 +25,7 @@ import httpx
 BASE = os.environ.get("BIA_BASE", "http://localhost:8000").rstrip("/")
 USER = os.environ.get("BIA_USER", "admin")
 PASS = os.environ.get("BIA_PASS", "admin123")
+PASS2 = os.environ.get("BIA_PASS2", "Admin@123456")
 QUESTION = os.environ.get(
     "BIA_QUESTION", "为什么6月信息流渠道点击量下滑？请做归因分析"
 )
@@ -130,29 +131,63 @@ def main() -> None:
     body = r.json()
     check("健康检查", r.status_code == 200 and body.get("status") == "ok", str(body))
 
-    # 2. 登录（mock OIDC：用户名密码换授权码）
-    r = client.post("/api/auth/login", json={"username": USER, "password": PASS})
+    # 2. 登录：优先初始口令；若上次运行中断导致口令已变，自动改用 PASS2 自愈
+    pass_used = PASS
+    r = client.post("/api/auth/login", json={"username": USER, "password": pass_used})
+    if r.status_code != 200 or not r.json().get("code"):
+        pass_used = PASS2
+        r = client.post("/api/auth/login", json={"username": USER, "password": pass_used})
     code = r.json().get("code")
-    check("登录", r.status_code == 200 and bool(code), f"status={r.status_code}")
+    check("登录", r.status_code == 200 and bool(code), f"status={r.status_code} pass_used={pass_used}")
+
+    def exchange() -> tuple[dict, str]:
+        r = client.post(
+            "/api/auth/token",
+            json={
+                "grant_type": "authorization_code",
+                "code": code,
+                "client_id": "bia-web",
+                "redirect_uri": "http://localhost:8080/auth/callback",
+            },
+        )
+        token = r.json().get("access_token", "")
+        check("换取 token", r.status_code == 200 and bool(token))
+        return {"Authorization": f"Bearer {token}"}, token
 
     # 3. 授权码换 token
-    r = client.post(
-        "/api/auth/token",
-        json={
-            "grant_type": "authorization_code",
-            "code": code,
-            "client_id": "bia-web",
-            "redirect_uri": "http://localhost:8080/auth/callback",
-        },
-    )
-    token = r.json().get("access_token", "")
-    check("换取 token", r.status_code == 200 and bool(token))
-    headers = {"Authorization": f"Bearer {token}"}
+    headers, _ = exchange()
 
-    # 4. 当前用户
+    # 4. 当前用户 + 首次登录强制改密流程
     r = client.get("/api/auth/me", headers=headers)
     me = r.json()
     check("当前用户", r.status_code == 200 and me.get("username") == USER, str(me))
+    if me.get("must_change_password"):
+        # 4.1 未改密前业务接口应被拦截
+        r = client.get("/api/chat/ls", headers=headers, params={"page": 1, "page_size": 1})
+        blocked = r.status_code == 403 and r.json().get("code") == "PASSWORD_CHANGE_REQUIRED"
+        check("改密前业务接口拦截", blocked, f"status={r.status_code} body={r.text[:120]}")
+        # 4.2 原密码错误应被拒绝
+        r = client.post(
+            "/api/auth/change-password",
+            headers=headers,
+            json={"old_password": "wrong-old-password", "new_password": PASS2},
+        )
+        check("错误原密码被拒绝", r.status_code == 403, f"status={r.status_code}")
+        # 4.3 正式改密（初始口令 → PASS2）
+        r = client.post(
+            "/api/auth/change-password",
+            headers=headers,
+            json={"old_password": pass_used, "new_password": PASS2},
+        )
+        check("修改密码", r.status_code == 200, f"status={r.status_code} body={r.text[:120]}")
+        # 4.4 用新口令重新登录，改密标记应清除
+        r = client.post("/api/auth/login", json={"username": USER, "password": PASS2})
+        code = r.json().get("code")
+        headers, _ = exchange()
+        pass_used = PASS2
+        r = client.get("/api/auth/me", headers=headers)
+        me = r.json()
+        check("改密后标记清除", r.status_code == 200 and not me.get("must_change_password"), str(me))
 
     # 5. 数据源列表（管理员接口），取启用的示例库
     r = client.get("/api/admin/datasources", headers=headers)
@@ -168,9 +203,41 @@ def main() -> None:
     print("\n== 冒烟测试全部通过 ==")
 
 
+def restore_password() -> None:
+    """恢复初始口令（仅当测试期间口令变为 PASS2 时执行，保证演示账号可用）。"""
+    try:
+        r = client.post("/api/auth/login", json={"username": USER, "password": PASS2})
+        code = r.json().get("code")
+        if not code:
+            return
+        r = client.post(
+            "/api/auth/token",
+            json={
+                "grant_type": "authorization_code",
+                "code": code,
+                "client_id": "bia-web",
+                "redirect_uri": "http://localhost:8080/auth/callback",
+            },
+        )
+        token = r.json().get("access_token", "")
+        if not token:
+            return
+        r = client.post(
+            "/api/auth/change-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"old_password": PASS2, "new_password": PASS},
+        )
+        if r.status_code == 200:
+            print("[INFO] 已恢复初始口令 admin123")
+    except Exception as e:  # noqa: BLE001
+        print(f"[WARN] 恢复口令失败（可 docker compose down -v 重建初始化）: {e}")
+
+
 if __name__ == "__main__":
     try:
         main()
     except httpx.HTTPError as e:
         print(f"[FAIL] 请求异常: {e}")
         sys.exit(1)
+    finally:
+        restore_password()

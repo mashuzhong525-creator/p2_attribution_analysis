@@ -10,12 +10,15 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from app.core.config import settings
-from app.core.deps import get_current_user
+from app.core.db import get_db
+from app.core.deps import get_current_user_relaxed
 from app.core.errors import auth_expired, forbidden, validation_error
 from app.domains.auth.keys import oidc_keys
 from app.domains.auth import service as auth_svc
+from app.models.auth import AuthUser
 from app.models.business import User
 from app.schemas.models import CurrentUserOut
 
@@ -42,6 +45,11 @@ class RefreshIn(BaseModel):
     client_id: str | None = None
 
 
+class ChangePasswordIn(BaseModel):
+    old_password: str
+    new_password: str
+
+
 def _set_cookie(resp: Response, token: str) -> None:
     resp.set_cookie(
         _COOKIE,
@@ -62,7 +70,7 @@ async def login(body: LoginIn) -> dict:
     code = await auth_svc.issue_auth_code(
         user, settings.OIDC_CLIENT_ID, settings.OIDC_REDIRECT_URI, {"openid": True}
     )
-    return {"code": code}
+    return {"code": code, "must_change_password": user.must_change_password}
 
 
 @router.post("/api/auth/token")
@@ -118,7 +126,7 @@ async def jwks() -> dict:
 
 
 @router.get("/api/auth/userinfo")
-async def userinfo(user: User = Depends(get_current_user)) -> dict:
+async def userinfo(user: User = Depends(get_current_user_relaxed)) -> dict:
     return {
         "sub": user.external_user_id,
         "username": user.username,
@@ -128,10 +136,29 @@ async def userinfo(user: User = Depends(get_current_user)) -> dict:
 
 
 @router.get("/api/auth/me", response_model=CurrentUserOut)
-async def me(user: User = Depends(get_current_user)) -> CurrentUserOut:
+async def me(
+    user: User = Depends(get_current_user_relaxed),
+    db=Depends(get_db),
+) -> CurrentUserOut:
+    auth_user = (
+        await db.execute(select(AuthUser).where(AuthUser.id == user.external_user_id))
+    ).scalar_one_or_none()
     return CurrentUserOut(
-        id=user.id, username=user.username, display_name=user.display_name, role=user.role
+        id=user.id,
+        username=user.username,
+        display_name=user.display_name,
+        role=user.role,
+        must_change_password=bool(auth_user and auth_user.must_change_password),
     )
+
+
+@router.post("/api/auth/change-password")
+async def change_password(
+    body: ChangePasswordIn,
+    user: User = Depends(get_current_user_relaxed),
+) -> dict:
+    await auth_svc.change_password(user.external_user_id, body.old_password, body.new_password)
+    return {"status": "ok", "message": "密码修改成功，请牢记新密码"}
 
 
 @router.post("/api/auth/logout")

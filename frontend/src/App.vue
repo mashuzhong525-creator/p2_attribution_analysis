@@ -29,7 +29,7 @@ onUnmounted(() => window.removeEventListener('toast', onToast))
 
 <template>
   <div class="app-shell">
-    <header class="topbar" v-if="auth.user && !route.meta.public">
+    <header class="topbar" v-if="auth.user && !route.meta.public && !route.meta.standalone">
       <div class="brand">经营归因分析系统</div>
       <nav class="topnav">
         <router-link to="/">工作台</router-link>

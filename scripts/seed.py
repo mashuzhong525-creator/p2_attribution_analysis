@@ -95,7 +95,8 @@ def seed_auth_users(s) -> None:
         if s.execute(select(AuthUser).where(AuthUser.username == username)).scalar_one_or_none():
             continue
         s.add(AuthUser(id=uuid7_str(), username=username, password_hash=hash_password(pw),
-                       display_name=disp, role=role, status="active"))
+                       display_name=disp, role=role, status="active",
+                       must_change_password=True))
 
 
 def seed_auth_client(s) -> None:

@@ -42,7 +42,7 @@ docker compose ps          # 四服务均应为 running/healthy
 #    后端API：http://localhost:8000/docs   （Swagger）
 ```
 
-**默认账号**：`admin / admin123`（管理员）、`analyst / analyst123`（分析师）。
+**默认账号**：`admin / admin123`（管理员）、`analyst / analyst123`（分析师）。**首次登录必须修改密码**，修改成功后才能使用系统；生产部署请把初始口令替换为强口令。
 
 backend 容器启动时自动执行：`alembic upgrade head`（建 17 表）→ 种子（配置/认证用户/客户端/业务用户/数据源）→ 生成两个场景示例库数据（约 15 万行），**无需手工初始化**。
 
@@ -57,7 +57,7 @@ backend 容器启动时自动执行：`alembic upgrade head`（建 17 表）→ 
 
 ## 验证与测试
 
-端到端冒烟测试覆盖：健康检查 → 登录 → 选数据源 → 建会话 → 提问 → 任务终态 → 六段式结果 → 会话历史 → WS token（自动清理测试会话）：
+端到端冒烟测试覆盖：健康检查 → 登录 → 首次登录强制改密（业务拦截 / 错误原密码 / 正式改密 / 标记清除）→ 选数据源 → 建会话 → 提问 → 任务终态 → 六段式结果 → 会话历史 → WS token（自动清理测试会话，并在结束后恢复初始口令）：
 
 ```bash
 python scripts/smoke_test.py

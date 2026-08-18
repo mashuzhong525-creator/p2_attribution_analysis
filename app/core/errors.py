@@ -38,6 +38,9 @@ def auth_expired(detail: str | None = None) -> BizError:
 def forbidden(detail: str | None = None) -> BizError:
     return BizError("FORBIDDEN", "无权限访问", 403, detail)
 
+def password_change_required(detail: str | None = None) -> BizError:
+    return BizError("PASSWORD_CHANGE_REQUIRED", "首次登录需先修改密码", 403, detail)
+
 def not_found(resource: str = "资源") -> BizError:
     return BizError("NOT_FOUND", f"{resource}不存在", 404)
 

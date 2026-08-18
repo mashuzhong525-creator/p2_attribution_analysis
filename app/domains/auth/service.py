@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core.db import AsyncSessionLocal
 from app.core.errors import auth_expired, forbidden, not_found, validation_error
@@ -33,6 +33,31 @@ async def authenticate(username: str, password: str) -> AuthUser | None:
         if u and u.status == "active" and verify_password(password, u.password_hash):
             return u
     return None
+
+
+async def change_password(user_id: str, old_password: str, new_password: str) -> None:
+    """修改密码：校验原密码 → 更新哈希并清除“首次登录需改密”标记 → 吊销既有 refresh_token。"""
+    if len(new_password) < 8:
+        raise validation_error("新密码长度至少 8 位")
+    if new_password == old_password:
+        raise validation_error("新密码不能与原密码相同")
+    async with AsyncSessionLocal() as db:
+        u = (await db.get(AuthUser, user_id))
+        if u is None:
+            raise not_found("用户")
+        if not verify_password(old_password, u.password_hash):
+            raise forbidden("原密码错误")
+        from app.core.security import hash_password
+
+        u.password_hash = hash_password(new_password)
+        u.must_change_password = False
+        # 密码已变更：旧 refresh_token 全部失效
+        await db.execute(
+            update(AuthRefreshToken)
+            .where(AuthRefreshToken.user_id == user_id, AuthRefreshToken.revoked_at.is_(None))
+            .values(revoked_at=_now())
+        )
+        await db.commit()
 
 
 async def get_active_client(client_id: str) -> AuthClient | None:

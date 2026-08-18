@@ -13,15 +13,17 @@ from sqlalchemy import select
 from app.core.db import get_db
 from app.core.security import JwtClaims, jwt_verifier
 from app.models.business import User
+from app.models.auth import AuthUser
 
 _COOKIE_NAME = "access_token"
 
 
-async def get_current_user(
+async def get_current_user_relaxed(
     request: Request,
     access_token: str | None = Cookie(default=None),
     db=Depends(get_db),
 ) -> User:
+    """解析当前用户（不校验“首次登录改密”），供 /api/auth/me、改密等认证类接口使用。"""
     auth = request.headers.get("Authorization")
     token = access_token
     if not token and auth and auth.lower().startswith("bearer "):
@@ -65,6 +67,21 @@ async def get_current_user(
         if user.role != claims.role:
             user.role = claims.role
             await db.commit()
+    return user
+
+
+async def get_current_user(
+    user: User = Depends(get_current_user_relaxed),
+    db=Depends(get_db),
+) -> User:
+    """业务接口依赖：首次登录且未改密时拒绝访问，返回 403 PASSWORD_CHANGE_REQUIRED。"""
+    auth_user = (
+        await db.execute(select(AuthUser).where(AuthUser.id == user.external_user_id))
+    ).scalar_one_or_none()
+    if auth_user is not None and auth_user.must_change_password:
+        from app.core.errors import password_change_required
+
+        raise password_change_required()
     return user
 
 

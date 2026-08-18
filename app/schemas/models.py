@@ -28,6 +28,7 @@ class CurrentUserOut(BaseModel):
     username: str
     display_name: str
     role: str
+    must_change_password: bool = False
 
 
 # ---------------- Chat ----------------
