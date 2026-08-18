@@ -177,7 +177,6 @@ class DataSourceCreate(BaseModel):
     password: str
     is_readonly: bool = True
     is_enabled: bool = True
-    description: str | None = None
 
 
 class DataSourceUpdate(BaseModel):
@@ -190,7 +189,6 @@ class DataSourceUpdate(BaseModel):
     password: str | None = None
     is_readonly: bool | None = None
     is_enabled: bool | None = None
-    description: str | None = None
 
 
 class DataSourceOut(BaseModel):
@@ -203,7 +201,6 @@ class DataSourceOut(BaseModel):
     username: str
     is_readonly: bool
     is_enabled: bool
-    description: str | None = None
 
 
 class ReloadOut(BaseModel):

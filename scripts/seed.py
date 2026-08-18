@@ -75,8 +75,9 @@ AUTH_USERS = [
 ]
 
 DATA_SOURCES = [
-    ("商品目录优化示例库", "scenario_goods", "mysql", "mysql", 3306, "scenario_goods", "bia", "scenario_pass", True, True),
-    ("库存异常分析示例库", "scenario_inventory", "mysql", "mysql", 3306, "scenario_inventory", "bia", "scenario_pass", True, True),
+    # 场景示例库账号密码与 MySQL 初始化一致（跟随环境变量，避免硬编码漂移）
+    ("商品目录优化示例库", "scenario_goods", "mysql", "mysql", 3306, "scenario_goods", "bia", settings.DB_PASSWORD, True, True),
+    ("库存异常分析示例库", "scenario_inventory", "mysql", "mysql", 3306, "scenario_inventory", "bia", settings.DB_PASSWORD, True, True),
     ("外部业务库 bi-prod", "bi-prod", "mysql", "10.0.0.8", 3306, "bi_warehouse", "bi_ro", "bi_pass", True, False),
 ]
 
@@ -119,7 +120,16 @@ def seed_biz_users(s) -> None:
 
 def seed_data_sources(s) -> None:
     for name, _dbkey, dtype, host, port, database, user, pw, readonly, enabled in DATA_SOURCES:
-        if s.execute(select(DataSource).where(DataSource.name == name)).scalar_one_or_none():
+        existing = s.execute(select(DataSource).where(DataSource.name == name)).scalar_one_or_none()
+        if existing:
+            # 幂等更新：账号/密码/地址跟随配置漂移
+            existing.host = host
+            existing.port = port
+            existing.database = database
+            existing.username = user
+            existing.password_encrypted = encrypt_secret(pw)
+            existing.is_readonly = bool(readonly)
+            existing.is_enabled = bool(enabled)
             continue
         s.add(DataSource(id=uuid7_str(), name=name, db_type=dtype, host=host, port=port,
                         database=database, username=user, password_encrypted=encrypt_secret(pw),

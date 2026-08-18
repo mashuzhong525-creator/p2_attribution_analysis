@@ -13,7 +13,7 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./
 COPY scripts ./scripts
-RUN mkdir -p workspace/uploads workspace/exports \
+RUN mkdir -p data/workspace data/uploads data/exports \
     && chmod +x scripts/entrypoint.sh
 
 EXPOSE 8000

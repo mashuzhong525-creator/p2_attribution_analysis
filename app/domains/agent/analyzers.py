@@ -30,7 +30,8 @@ async def _ds_query(ds: DataSource, sql: str) -> tuple[list[str], list[tuple]]:
         cols = [d[0] for d in cur.description] if cur.description else []
         return cols, rows
     finally:
-        await conn.close()
+        # asyncmy 0.2.x Connection.close() 为同步方法（await 会 TypeError）
+        conn.close()
 
 
 def _scalar(rows, default=0):
@@ -46,7 +47,7 @@ async def analyze_goods(ds: DataSource) -> tuple[SixSectionResult, list[dict]]:
     _, r_jun = await _ds_query(ds, "SELECT SUM(clicks) FROM fact_channel_daily WHERE channel_id='CH_INFO' AND d>='2026-06-01'")
     _, r_may = await _ds_query(ds, "SELECT SUM(clicks) FROM fact_channel_daily WHERE channel_id='CH_INFO' AND d>='2026-05-01' AND d<'2026-06-01'")
     jun = _scalar(r_jun); may = _scalar(r_may)
-    decline = (1 - jun / may) if may else 0.0
+    decline = (jun / may - 1) if may else 0.0  # 负值=下降，如 -0.59 表示下滑 59%
     steps.append({"name": "db_query", "args": {"sql": "fact_channel_daily 信息流 6月/5月点击聚合"}, "summary": f"6月信息流点击 {jun:,} vs 5月 {may:,}"})
     # 2. 创意更换日志
     _, r_creative = await _ds_query(ds, "SELECT note FROM creative_change_log WHERE channel_id='CH_INFO'")
@@ -71,7 +72,7 @@ async def analyze_goods(ds: DataSource) -> tuple[SixSectionResult, list[dict]]:
         ],
         evidence_list=[
             Evidence(source_type="db_query", source_name="fact_channel_daily",
-                     evidence_text=f"信息流渠道 6 月点击 {jun:,}，较 5 月 {may:,} 下滑 {decline:+.1%}。",
+                     evidence_text=f"信息流渠道 6 月点击 {jun:,}，较 5 月 {may:,} 下滑 {abs(decline):.1%}。",
                      related_metric="信息流点击环比变化", confidence=0.95),
             Evidence(source_type="db_query", source_name="creative_change_log",
                      evidence_text=f"信息流主素材于 2026-06-03 更换为夏季版（{creative_note}），与下滑起点吻合。",
@@ -81,7 +82,7 @@ async def analyze_goods(ds: DataSource) -> tuple[SixSectionResult, list[dict]]:
                      related_metric="曝光基数下降", confidence=0.85),
         ],
         conclusion_text=(
-            f"6 月信息流点击环比下滑约 {decline:+.1%}，主因为双因素叠加："
+            f"6 月信息流点击环比下滑约 {abs(decline):.1%}，主因为双因素叠加："
             f"（1）信息流主素材于 6/3 更换为夏季版导致 CTR 预期下降；"
             f"（2）头部 5 个 SKU 自 6/10 下架，直接削减可投放曝光基数。"
             f"二者共同导致信息流渠道点击显著回落，并带动整体 GMV 承压。"

@@ -11,8 +11,12 @@ from app.models.business import Conversation, DataSource, Message
 
 
 async def _default_data_source_id(db) -> str | None:
-    """data_source_id 空值回退内置示例库（name='business'，§2.3）。"""
-    row = (await db.execute(select(DataSource).where(DataSource.name == "business"))).scalar_one_or_none()
+    """data_source_id 空值回退内置示例库（取第一个启用数据源，§2.3）。"""
+    row = (
+        await db.execute(
+            select(DataSource).where(DataSource.is_enabled == True).order_by(DataSource.created_at).limit(1)  # noqa: E712
+        )
+    ).scalar_one_or_none()
     return row.id if row else None
 
 

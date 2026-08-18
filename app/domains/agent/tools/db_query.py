@@ -113,4 +113,5 @@ class DbQueryTool(Tool):
             return ToolResult(success=False, error=f"查询执行失败：{e}")
         finally:
             if conn:
-                await conn.close()
+                # asyncmy 0.2.x close() 为同步方法（await 会 TypeError）
+                conn.close()

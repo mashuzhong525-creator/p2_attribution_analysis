@@ -44,7 +44,7 @@ def _out(ds: DataSource) -> DataSourceOut:
     return DataSourceOut(
         id=ds.id, name=ds.name, db_type=ds.db_type, host=ds.host, port=ds.port,
         database=ds.database, username=ds.username, is_readonly=ds.is_readonly,
-        is_enabled=ds.is_enabled, description=ds.description,
+        is_enabled=ds.is_enabled,
     )
 
 
@@ -60,7 +60,7 @@ async def create_ds(body: DataSourceCreate, _: User = Depends(require_admin), db
         id=uuid7_str(), name=body.name, db_type=body.db_type, host=body.host, port=body.port,
         database=body.database, username=body.username,
         password_encrypted=encrypt_secret(body.password),
-        is_readonly=body.is_readonly, is_enabled=body.is_enabled, description=body.description,
+        is_readonly=body.is_readonly, is_enabled=body.is_enabled,
     )
     db.add(ds)
     await db.commit()
@@ -73,7 +73,7 @@ async def update_ds(ds_id: str, body: DataSourceUpdate, _: User = Depends(requir
     ds = (await db.get(DataSource, ds_id))
     if ds is None:
         raise not_found("数据源")
-    for f in ("name", "db_type", "host", "port", "database", "username", "is_readonly", "is_enabled", "description"):
+    for f in ("name", "db_type", "host", "port", "database", "username", "is_readonly", "is_enabled"):
         v = getattr(body, f)
         if v is not None:
             setattr(ds, f, v)

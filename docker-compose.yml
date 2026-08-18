@@ -1,7 +1,9 @@
-# 经营归因分析系统 · Docker Compose（M1 数据地基）
-# 当前启用：mysql / redis / backend（可立即验证迁移+种子+示例数据）。
-# frontend / auth 容器预留（见底部注释），待 T9/T10 落地后取消注释启用。
+# 经营归因分析系统 · Docker Compose
+# 独立 Docker 环境：顶层 name=bia → 容器/网络/卷均以 bia- 前缀隔离，不与其它项目共用。
+# 当前启用：mysql / redis / backend（frontend 见 T10 同步落地后启用）。
 # 资源约束：2C2G，backend 连接池/并发已按此收敛。
+
+name: bia
 
 services:
   mysql:
@@ -14,6 +16,7 @@ services:
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./scripts/mysql-init:/docker-entrypoint-initdb.d:ro
     ports:
       - "3306:3306"
     healthcheck:
@@ -43,13 +46,13 @@ services:
       DB_NAME: ${DB_NAME:-bia}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      OIDC_ISSUER: http://auth:8000
+      OIDC_ISSUER: http://backend:8000
       OIDC_CLIENT_ID: bia-web
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-change-me-client-secret}
       OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:8080/auth/callback}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
       FLAG_SCENARIO_DATA: ${FLAG_SCENARIO_DATA:-true}
-      FLAG_COMMAND_EXEC: ${FLAG_COMMAND_EXEC:-true}
+      FLAG_COMMAND_EXEC: ${FLAG_COMMAND_EXEC:-false}
       FLAG_ATTACHMENT: ${FLAG_ATTACHMENT:-true}
       FLAG_EXTERNAL_DS: ${FLAG_EXTERNAL_DS:-false}
       FLAG_RESULT_GENERATE: ${FLAG_RESULT_GENERATE:-false}
@@ -64,28 +67,13 @@ services:
     ports:
       - "8000:8000"
 
-#  # ===== 待 T9 启用：OIDC 认证中心（独立容器，复用 backend 镜像运行 auth 子应用）=====
-#  auth:
-#    build: .
-#    command: uvicorn app.auth_main:app --host 0.0.0.0 --port 8000
-#    environment:
-#      DB_HOST: mysql
-#      DB_USER: ${DB_USER:-bia}
-#      DB_PASSWORD: ${DB_PASSWORD:-bia_password}
-#      DB_NAME: ${DB_NAME:-bia}
-#    depends_on:
-#      mysql:
-#        condition: service_healthy
-#    ports:
-#      - "8001:8000"
-
-#  # ===== 待 T10 启用：前端（Vue3 构建 + nginx 托管）=====
-#  frontend:
-#    build: ./frontend
-#    depends_on:
-#      - backend
-#    ports:
-#      - "8080:80"
+  # ===== T10：前端（Vue3 构建 + nginx 托管，/api 与 WS 反代到 backend）=====
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
 
 volumes:
   mysql_data:

@@ -20,6 +20,11 @@ from app.domains.auth.keys import oidc_keys
 from app.models.auth import AuthAuthCode, AuthClient, AuthRefreshToken, AuthUser
 
 
+def _now() -> datetime:
+    """MySQL DATETIME 列读出为 naive，统一用 naive UTC 比较/写入。"""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 async def authenticate(username: str, password: str) -> AuthUser | None:
     async with AsyncSessionLocal() as db:
         u = (await db.execute(
@@ -49,7 +54,7 @@ async def issue_auth_code(user: AuthUser, client_id: str, redirect_uri: str, sco
             user_id=user.id,
             redirect_uri=redirect_uri,
             scope=scope,
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+            expires_at=_now() + timedelta(minutes=10),
         ))
         await db.commit()
     return code
@@ -61,7 +66,7 @@ async def exchange_code(code: str, client_id: str, redirect_uri: str) -> tuple[s
         ac = (await db.execute(
             select(AuthAuthCode).where(AuthAuthCode.code == code)
         )).scalar_one_or_none()
-        now = datetime.now(timezone.utc)
+        now = _now()
         if (
             ac is None
             or ac.consumed_at is not None
@@ -95,7 +100,7 @@ async def refresh_access(refresh_token: str, client_id: str) -> tuple[str, str]:
         rt = (await db.execute(
             select(AuthRefreshToken).where(AuthRefreshToken.token_hash == refresh_token)
         )).scalar_one_or_none()
-        now = datetime.now(timezone.utc)
+        now = _now()
         if rt is None or rt.revoked_at is not None or rt.expires_at < now:
             raise auth_expired("refresh_token 无效")
         if rt.client_id != client_id:
@@ -119,7 +124,7 @@ async def revoke_refresh(refresh_token: str) -> None:
             select(AuthRefreshToken).where(AuthRefreshToken.token_hash == refresh_token)
         )).scalar_one_or_none()
         if rt:
-            rt.revoked_at = datetime.now(timezone.utc)
+            rt.revoked_at = _now()
             await db.commit()
 
 

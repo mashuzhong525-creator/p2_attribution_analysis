@@ -124,10 +124,10 @@ def build():
                     base_stock = rng.randint(200, 800)
                     daily_sales = rng.randint(5, 40)
                     inbound = rng.randint(0, 60)
-                    # 异常 SKU 在 WH1 自 anomaly_start 起采购延迟→库存枯竭
+                    # 异常 SKU 在 WH1 自 anomaly_start 起采购延迟→库存枯竭（确定性触发：钳制起点）
                     if sku == anomaly_sku and wh_id == anomaly_wh and d >= anomaly_start:
                         inbound = 0
-                        base_stock = max(-30, base_stock - (d - anomaly_start).days * 25)
+                        base_stock = min(base_stock, 150) - (d - anomaly_start).days * 25
                     stock = base_stock + inbound - daily_sales
                     turnover = round(stock / max(daily_sales, 1), 1)
                     inv_rows.append({"sku_id": sku, "wh_id": wh_id, "d": d, "stock_qty": stock,
