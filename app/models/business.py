@@ -47,10 +47,14 @@ class User(Base):
 
 class Conversation(Base):
     __tablename__ = "conversations"
-    __table_args__ = (Index("ix_conv_user_msg", "user_id", "last_message_at"),)
+    __table_args__ = (
+        Index("ix_conv_user_msg", "user_id", "last_message_at"),
+        Index("ix_conv_ds", "data_source_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uuid7_str)
     user_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    data_source_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     title: Mapped[str] = mapped_column(String(128), default="新会话", nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="active", nullable=False)
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

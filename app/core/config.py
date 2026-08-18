@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     REDIS_PASSWORD: str = ""
 
-    # ---- 认证中心（OIDC，同仓库独立 schema auth_）----
-    OIDC_ISSUER: str = "http://auth:8000"
+    # ---- 认证中心（OIDC，合并进 backend；RS256 签发 + JWKS 验签）----
+    OIDC_ISSUER: str = "http://localhost:8000"
     OIDC_CLIENT_ID: str = "bia-web"
     OIDC_CLIENT_SECRET: str = "change-me-client-secret"
     OIDC_REDIRECT_URI: str = "http://localhost:8080/auth/callback"
@@ -50,7 +50,8 @@ class Settings(BaseSettings):
     OIDC_AUTH_PATH: str = "/authorize"
     OIDC_TOKEN_PATH: str = "/token"
     OIDC_JWKS_PATH: str = "/.well-known/jwks.json"
-    JWT_ALGORITHM: str = "HS256"
+    OIDC_RSA_PRIVATE_KEY: str = ""  # PEM 私钥；为空则启动时生成临时密钥（仅开发，重启失效）
+    JWT_ALGORITHM: str = "RS256"
     JWT_EXPIRE_SECONDS: int = 86400  # 业务端会话 Cookie 令牌有效期
 
     # ---- 加密（数据源密码 AES；生产必填）----
@@ -62,8 +63,9 @@ class Settings(BaseSettings):
     AGENT_TIMEOUT_SEC: int = 600
     WS_MAX_CONNECTIONS: int = 10  # 并发 WS 会话上限
     ATTACHMENT_MAX_SIZE_MB: int = 20
-    UPLOAD_DIR: str = "workspace/uploads"
-    EXPORT_DIR: str = "workspace/exports"
+    DATA_ROOT: str = "data"  # 工作区/上传/导出根目录（paths.py 与附件服务基于此）
+    UPLOAD_DIR: str = "data/uploads"
+    EXPORT_DIR: str = "data/exports"
 
     # ---- 功能开关（默认值；运行时以 system_configs 覆盖）----
     FLAG_SCENARIO_DATA: bool = True
@@ -105,3 +107,81 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+# ---------------------------------------------------------------------------
+# system_configs 热更新缓存（§2.4）
+# 启动时全量加载；POST /api/admin/reload 后全量刷新。值按 config_type 反序列化。
+# ---------------------------------------------------------------------------
+from typing import Any  # noqa: E402
+
+_TYPE_DESER = {
+    "bool": lambda v: str(v).strip().lower() in ("1", "true", "yes", "on"),
+    "int": lambda v: int(str(v).strip()),
+    "float": lambda v: float(str(v).strip()),
+    "string": lambda v: str(v),
+    "json": lambda v: __import__("json").loads(v),
+}
+
+
+class ConfigCache:
+    """system_configs 单例缓存。"""
+
+    _instance: "ConfigCache | None" = None
+    _values: dict[str, Any] = {}
+
+    def __new__(cls) -> "ConfigCache":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    async def load(self, db) -> None:
+        from sqlalchemy import select
+
+        from app.models.business import SystemConfig
+
+        rows = (await db.execute(select(SystemConfig))).scalars().all()
+        self._values = {}
+        for r in rows:
+            fn = _TYPE_DESER.get(r.config_type, str)
+            try:
+                self._values[r.config_key] = fn(r.config_value)
+            except Exception:
+                self._values[r.config_key] = r.config_value
+        get_logger_cache("config").info("ConfigCache loaded %d keys", len(self._values))
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._values.get(key, default)
+
+    def get_int(self, key: str, default: int = 0) -> int:
+        v = self._values.get(key, default)
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def get_bool(self, key: str, default: bool = False) -> bool:
+        v = self._values.get(key, default)
+        if isinstance(v, bool):
+            return v
+        return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+    def get_float(self, key: str, default: float = 0.0) -> float:
+        v = self._values.get(key, default)
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    async def reload(self, db) -> dict:
+        before = dict(self._values)
+        await self.load(db)
+        updated = [k for k in self._values if self._values.get(k) != before.get(k)]
+        return {"updated_keys": updated}
+
+
+def get_logger_cache(module: str) -> logging.Logger:  # type: ignore[name-defined]
+    import logging
+
+    return logging.getLogger(f"bia.{module}")
+

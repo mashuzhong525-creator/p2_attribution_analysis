@@ -17,6 +17,9 @@ engine = create_async_engine(
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+# task/service、queue、router 等已按 `SessionLocal` 命名引用；保留别名以兼容。
+SessionLocal = AsyncSessionLocal
+
 
 async def get_db() -> AsyncSession:
     """FastAPI 依赖：提供请求级异步会话。"""
@@ -24,4 +27,4 @@ async def get_db() -> AsyncSession:
         yield session
 
 
-__all__ = ["engine", "AsyncSessionLocal", "get_db", "Base"]
+__all__ = ["engine", "AsyncSessionLocal", "SessionLocal", "get_db", "Base"]
