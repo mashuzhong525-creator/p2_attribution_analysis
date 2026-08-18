@@ -14,6 +14,10 @@ const dsStore = useDatasourceStore()
 const input = ref('')
 const msgListEl = ref(null)
 const pollTimer = ref(null)
+// 新建会话弹窗
+const showNew = ref(false)
+const newTitle = ref('')
+const newDsId = ref('')
 
 const currentConv = computed(() => convStore.current)
 const messages = computed(() => (currentConv.value ? msgStore.messages(currentConv.value.conversation_id) : []))
@@ -51,7 +55,15 @@ function unbindWs() {
 
 // ---- 会话 ----
 async function newConv() {
-  const conv = await convStore.create('新会话')
+  // 打开新建弹窗，可选数据源（默认第一个启用数据源）
+  if (!dsStore.list.length) { try { await dsStore.fetch() } catch {} }
+  newTitle.value = '新会话'
+  newDsId.value = dsStore.list.length ? dsStore.list[0].id : ''
+  showNew.value = true
+}
+async function confirmNew() {
+  const conv = await convStore.create(newTitle.value.trim() || '新会话', newDsId.value || null)
+  showNew.value = false
   await selectConv(conv)
 }
 async function selectConv(conv) {
@@ -218,5 +230,27 @@ onUnmounted(() => {
       </template>
       <div v-else class="empty muted">选择会话并提问后，六段式结论将展示在这里</div>
     </aside>
+
+    <!-- 新建会话弹窗（可选数据源） -->
+    <div v-if="showNew" class="modal-mask" @click.self="showNew = false">
+      <div class="modal">
+        <h3>新建会话</h3>
+        <div class="form-grid">
+          <label style="grid-column: 1 / -1">会话标题
+            <input v-model="newTitle" placeholder="如：信息流下滑归因" />
+          </label>
+          <label style="grid-column: 1 / -1">数据源（决定归因分析查询哪个业务库）
+            <select v-model="newDsId" class="ds-select">
+              <option v-for="d in dsStore.list" :key="d.id" :value="d.id">{{ d.name }}（{{ d.database }}）</option>
+            </select>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <span class="spacer"></span>
+          <button class="btn ghost" @click="showNew = false">取消</button>
+          <button class="btn primary" @click="confirmNew">创建</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
