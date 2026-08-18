@@ -53,6 +53,10 @@ def _to_storage(config_type: str, value: Any) -> str:
     return str(value)
 
 
+# Config keys whose values should be masked (never returned as plaintext)
+_SENSITIVE_KEYS = {"llm_api_key"}
+
+
 @router.get("/api/admin/config", response_model=list[ConfigGroupOut])
 async def list_config(
     group: str | None = Query(default=None),
@@ -65,8 +69,9 @@ async def list_config(
     rows = (await db.execute(stmt.order_by(SystemConfig.config_group, SystemConfig.config_key))).scalars().all()
     by_group: dict[str, list[ConfigItemOut]] = {}
     for r in rows:
+        display_value = "***" if r.config_key in _SENSITIVE_KEYS else r.config_value
         by_group.setdefault(r.config_group, []).append(ConfigItemOut(
-            config_key=r.config_key, config_value=r.config_value,
+            config_key=r.config_key, config_value=display_value,
             config_type=r.config_type, description=r.description,
         ))
     return [ConfigGroupOut(group=g, items=items) for g, items in by_group.items()]
