@@ -1,0 +1,91 @@
+# 经营归因分析系统 · Docker Compose（M1 数据地基）
+# 当前启用：mysql / redis / backend（可立即验证迁移+种子+示例数据）。
+# frontend / auth 容器预留（见底部注释），待 T9/T10 落地后取消注释启用。
+# 资源约束：2C2G，backend 连接池/并发已按此收敛。
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_DATABASE: ${DB_NAME:-bia}
+      MYSQL_USER: ${DB_USER:-bia}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-bia_password}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: .
+    environment:
+      APP_ENV: ${APP_ENV:-prod}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-bia}
+      DB_PASSWORD: ${DB_PASSWORD:-bia_password}
+      DB_NAME: ${DB_NAME:-bia}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      OIDC_ISSUER: http://auth:8000
+      OIDC_CLIENT_ID: bia-web
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-change-me-client-secret}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:8080/auth/callback}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
+      FLAG_SCENARIO_DATA: ${FLAG_SCENARIO_DATA:-true}
+      FLAG_COMMAND_EXEC: ${FLAG_COMMAND_EXEC:-true}
+      FLAG_ATTACHMENT: ${FLAG_ATTACHMENT:-true}
+      FLAG_EXTERNAL_DS: ${FLAG_EXTERNAL_DS:-false}
+      FLAG_RESULT_GENERATE: ${FLAG_RESULT_GENERATE:-false}
+      WS_MAX_CONNECTIONS: 10
+      TASK_CONCURRENCY_LIMIT: 3
+      CORS_ORIGINS: '["http://localhost:8080","http://localhost:5173"]'
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+#  # ===== 待 T9 启用：OIDC 认证中心（独立容器，复用 backend 镜像运行 auth 子应用）=====
+#  auth:
+#    build: .
+#    command: uvicorn app.auth_main:app --host 0.0.0.0 --port 8000
+#    environment:
+#      DB_HOST: mysql
+#      DB_USER: ${DB_USER:-bia}
+#      DB_PASSWORD: ${DB_PASSWORD:-bia_password}
+#      DB_NAME: ${DB_NAME:-bia}
+#    depends_on:
+#      mysql:
+#        condition: service_healthy
+#    ports:
+#      - "8001:8000"
+
+#  # ===== 待 T10 启用：前端（Vue3 构建 + nginx 托管）=====
+#  frontend:
+#    build: ./frontend
+#    depends_on:
+#      - backend
+#    ports:
+#      - "8080:80"
+
+volumes:
+  mysql_data:
