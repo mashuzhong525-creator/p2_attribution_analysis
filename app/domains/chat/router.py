@@ -87,6 +87,7 @@ async def history(
     items = [
         MessageOut(
             message_id=m.id,
+            task_id=m.task_id,
             role=m.role,
             message_type=m.message_type,
             content=m.content,

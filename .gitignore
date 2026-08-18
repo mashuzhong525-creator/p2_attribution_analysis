@@ -52,8 +52,12 @@ coverage/
 uploads/
 exports/
 workspace/
+data/
 logs/
 *.log
+
+# ===== 本地个人技能库（含其他项目上下文，不上传公开仓库）=====
+skills/
 
 # ===== 编辑器 / 系统 =====
 .vscode/*

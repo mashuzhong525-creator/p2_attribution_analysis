@@ -55,6 +55,7 @@ class ConversationOut(BaseModel):
 
 class MessageOut(BaseModel):
     message_id: str
+    task_id: str | None = None
     role: str
     message_type: str
     content: str

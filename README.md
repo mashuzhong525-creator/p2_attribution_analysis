@@ -55,6 +55,17 @@ backend 容器启动时自动执行：`alembic upgrade head`（建 17 表）→ 
 
 提示：新建会话时可选数据源；不选则默认绑定第一个启用数据源。
 
+## 验证与测试
+
+端到端冒烟测试覆盖：健康检查 → 登录 → 选数据源 → 建会话 → 提问 → 任务终态 → 六段式结果 → 会话历史 → WS token（自动清理测试会话）：
+
+```bash
+python scripts/smoke_test.py
+# 可选环境变量：BIA_BASE / BIA_USER / BIA_PASS / BIA_QUESTION / BIA_QUESTION2
+```
+
+WebSocket 实时链路依赖 `websockets` 库（已写入 `requirements.txt`）；缺失时 uvicorn 会把升级请求当作普通 HTTP 返回 404，前端自动降级为轮询，仍可完成分析。
+
 ## 目录结构
 
 ```
@@ -97,6 +108,8 @@ docker compose config                  # 校验编排配置
 | `CORS_ORIGINS` | 本机前端地址 | 按需 | 前端域名白名单 |
 
 完整清单见 `docs/部署运维文档.md`。
+
+> 隐私与安全：`.env` 已被 `.gitignore` 排除，仓库只提交 `.env.example`；默认账号与密码仅用于本地演示，部署前请替换为强口令并显式设置 `OIDC_RSA_PRIVATE_KEY` 与 `APP_ENCRYPTION_KEY`。
 
 ## 文档索引
 

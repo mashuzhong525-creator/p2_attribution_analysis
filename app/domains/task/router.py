@@ -71,7 +71,7 @@ async def ws_token(
         user_id=user.id,
         conversation_id=conv_id,
         token=token,
-        expires_at=datetime.now(timezone.utc) + timedelta(seconds=ttl),
+        expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=ttl),
     )
     db.add(rec)
     await db.commit()

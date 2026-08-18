@@ -67,10 +67,12 @@ class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
         Index("ix_msg_conv_created", "conversation_id", "created_at"),
+        Index("ix_msg_task", "task_id"),
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uuid7_str)
     conversation_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    task_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     role: Mapped[str] = mapped_column(String(16), default="user", nullable=False)
     message_type: Mapped[str] = mapped_column(String(16), default="text", nullable=False)
     content: Mapped[str] = mapped_column(Text, default="", nullable=False)

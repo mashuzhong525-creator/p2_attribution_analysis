@@ -103,7 +103,8 @@ async def ws_endpoint(
         rec = (await db.execute(
             select(WebSocketToken).where(WebSocketToken.token == token))
         ).scalar_one_or_none()
-        now = datetime.now(timezone.utc)
+        # MySQL DATETIME 读出为 naive，统一用 naive UTC 比较（与 auth service 一致）
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if (
             rec is None
             or rec.conversation_id != conversation_id

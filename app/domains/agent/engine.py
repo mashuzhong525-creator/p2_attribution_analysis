@@ -109,6 +109,7 @@ async def _persist(db, task: AnalysisTask, conv: Conversation, six: SixSectionRe
     db.add(Message(
         id=uuid7_str(), conversation_id=conv.id, role="assistant",
         message_type="result", content=six.conclusion_text, seq_no=seq,
+        task_id=task.id,
     ))
     result = AnalysisResult(
         id=uuid7_str(), task_id=task.id, conversation_id=conv.id,

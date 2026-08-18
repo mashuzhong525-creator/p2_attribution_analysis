@@ -70,6 +70,13 @@ async function selectConv(conv) {
   if (convStore.current?.conversation_id === conv.conversation_id) return
   convStore.select(conv)
   await msgStore.loadHistory(conv.conversation_id)
+  // 刷新后回填历史六段式结果（结果消息带 task_id，历史接口同步返回）
+  if (currentTaskId.value && !msgStore.results[currentTaskId.value]) {
+    try {
+      const res = await fetch(`/api/results/${currentTaskId.value}`, { credentials: 'include' })
+      if (res.ok) msgStore.results[currentTaskId.value] = await res.json()
+    } catch { /* 回填失败不阻塞，后续可通过新提问重建 */ }
+  }
   if (dsStore.list.length === 0) { try { await dsStore.fetch() } catch {} }
   // 建立 WS
   try {

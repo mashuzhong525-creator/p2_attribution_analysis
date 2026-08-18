@@ -36,3 +36,4 @@ typing-inspection==0.4.4
 typing_extensions==4.16.0
 uuid6==2025.0.1
 uvicorn==0.52.3
+websockets==17.0.1  # uvicorn WebSocket 升级依赖（缺此库时 /api/ws 升级请求会被当成 HTTP 返回 404）
