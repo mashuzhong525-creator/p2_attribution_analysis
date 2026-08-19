@@ -12,9 +12,9 @@ app.use(router)
 window.addEventListener('auth:expired', () => {
   router.push('/login')
 })
-// 全局 toast
-window.$toast = (msg, type = 'info') => {
-  window.dispatchEvent(new CustomEvent('toast', { detail: { msg, type } }))
+// 全局 toast（支持 duration 毫秒，默认 3200）
+window.$toast = (msg, type = 'info', duration = 3200) => {
+  window.dispatchEvent(new CustomEvent('toast', { detail: { msg, type, duration } }))
 }
 
 app.mount('#app')

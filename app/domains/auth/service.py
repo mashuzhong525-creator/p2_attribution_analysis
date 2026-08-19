@@ -18,6 +18,10 @@ from app.core.security import gen_token, verify_password
 from app.core.uuid import uuid7_str
 from app.domains.auth.keys import oidc_keys
 from app.models.auth import AuthAuthCode, AuthClient, AuthRefreshToken, AuthUser
+from app.models.business import User
+
+_ALLOWED_ROLES = ("admin", "analyst", "viewer")
+_ALLOWED_STATUS = ("active", "disabled")
 
 
 def _now() -> datetime:
@@ -58,6 +62,130 @@ async def change_password(user_id: str, old_password: str, new_password: str) ->
             .values(revoked_at=_now())
         )
         await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# 管理员：用户管理（新增用户 / 控制权限 / 首登强制改密）
+# ---------------------------------------------------------------------------
+async def list_users(db, page: int = 1, page_size: int = 20) -> tuple[list[dict], int]:
+    """列出全部用户（含认证源状态与首登标记）。"""
+    from sqlalchemy import func as _func
+    from sqlalchemy import select as _sel
+
+    total = (await db.execute(_sel(_func.count(AuthUser.id)))).scalar_one()
+    rows = (
+        await db.execute(
+            _sel(AuthUser).order_by(AuthUser.created_at.desc())
+            .offset((page - 1) * page_size).limit(page_size)
+        )
+    ).scalars().all()
+    items = []
+    for a in rows:
+        biz = (await db.execute(_sel(User).where(User.external_user_id == a.id))).scalar_one_or_none()
+        items.append({
+            "id": a.id,
+            "username": a.username,
+            "display_name": biz.display_name if biz else a.display_name,
+            "role": a.role,
+            "status": a.status,
+            "must_change_password": bool(a.must_change_password),
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        })
+    return items, int(total)
+
+
+async def create_user(db, username: str, display_name: str, role: str, password: str) -> dict:
+    """管理员新增用户：写 auth_users + 业务 users，并强制首登改密。"""
+    from sqlalchemy import select as _sel
+
+    from app.core.security import hash_password as _hash
+
+    if len(password) < 8:
+        raise validation_error("密码长度至少 8 位")
+    if role not in _ALLOWED_ROLES:
+        raise validation_error("角色必须是 admin / analyst / viewer")
+    if (await db.execute(_sel(AuthUser).where(AuthUser.username == username))).scalar_one_or_none():
+        raise validation_error(f"用户名 {username} 已存在")
+    aid = uuid7_str()
+    auth_u = AuthUser(
+        id=aid, username=username, password_hash=_hash(password),
+        must_change_password=True,  # 首登强制改密
+        display_name=display_name, role=role, status="active",
+        created_at=_now(),
+    )
+    biz_u = User(
+        id=uuid7_str(), external_user_id=aid, username=username,
+        display_name=display_name, role=role, status="active",
+    )
+    db.add(auth_u)
+    db.add(biz_u)
+    await db.commit()
+    return {
+        "id": aid, "username": username, "display_name": display_name,
+        "role": role, "status": "active", "must_change_password": True,
+        "created_at": auth_u.created_at.isoformat() if auth_u.created_at else None,
+    }
+
+
+async def update_user(db, user_id: str, *, display_name=None, role=None, status=None,
+                      password=None) -> dict:
+    """管理员改用户：角色/状态/显示名可改；重置密码则强制首登改密。"""
+    from sqlalchemy import select as _sel
+
+    from app.core.security import hash_password as _hash
+
+    auth_u = (await db.get(AuthUser, user_id))
+    if auth_u is None:
+        raise not_found("用户")
+    biz = (await db.execute(_sel(User).where(User.external_user_id == auth_u.id))).scalar_one_or_none()
+    if role is not None:
+        if role not in _ALLOWED_ROLES:
+            raise validation_error("角色必须是 admin / analyst / viewer")
+        auth_u.role = role
+        if biz:
+            biz.role = role
+    if status is not None:
+        if status not in _ALLOWED_STATUS:
+            raise validation_error("状态必须是 active / disabled")
+        auth_u.status = status
+        if biz:
+            biz.status = status
+    if display_name is not None:
+        auth_u.display_name = display_name
+        if biz:
+            biz.display_name = display_name
+    if password is not None:
+        if len(password) < 8:
+            raise validation_error("密码长度至少 8 位")
+        auth_u.password_hash = _hash(password)
+        auth_u.must_change_password = True  # 重置密码 → 首登待改密
+    await db.commit()
+    return {
+        "id": auth_u.id, "username": auth_u.username,
+        "display_name": biz.display_name if biz else auth_u.display_name,
+        "role": auth_u.role, "status": auth_u.status,
+        "must_change_password": bool(auth_u.must_change_password),
+        "created_at": auth_u.created_at.isoformat() if auth_u.created_at else None,
+    }
+
+
+async def delete_user(db, user_id: str, actor_id: str) -> None:
+    """管理员删除用户：禁用认证源 + 软删业务用户。不允许删自己。"""
+    from sqlalchemy import select as _sel
+
+    if user_id == actor_id:
+        raise validation_error("不能删除当前登录的管理员账号")
+    auth_u = (await db.get(AuthUser, user_id))
+    if auth_u is None:
+        raise not_found("用户")
+    auth_u.status = "disabled"
+    biz = (await db.execute(_sel(User).where(User.external_user_id == auth_u.id))).scalar_one_or_none()
+    if biz:
+        from datetime import datetime as _dt, timezone as _tz
+
+        biz.status = "disabled"
+        biz.deleted_at = _dt.now(_tz)
+    await db.commit()
 
 
 async def get_active_client(client_id: str) -> AuthClient | None:

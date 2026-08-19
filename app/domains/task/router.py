@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import ConfigCache, settings
@@ -80,9 +80,14 @@ async def ws_token(
     conv_id = body.get("conversation_id")
     if not conv_id:
         raise not_found("会话")
-    # 简单限流：同一用户 1 分钟内最多 30 次
     ttl = ConfigCache().get_int("ws_token_ttl_seconds", 300)
     token = gen_token(48)
+    # 顺带清理已过期 token，防止 websocket_tokens 表无限膨胀（每次生成时摊销清理）
+    await db.execute(
+        delete(WebSocketToken).where(
+            WebSocketToken.expires_at < datetime.now(timezone.utc).replace(tzinfo=None)
+        )
+    )
     rec = WebSocketToken(
         id=uuid7_str(),
         user_id=user.id,

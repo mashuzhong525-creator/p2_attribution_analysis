@@ -423,6 +423,25 @@ async def analyze_inventory(ds: DataSource, query: str = "") -> tuple[SixSection
     except Exception:
         gaps.append("供应商提前期波动（fact_supplier_leadtime_daily）")
 
+    # 9) 销售预测：量化 SKU0001@WH1 在 PO0001 到货前的预测需求缺口
+    forecast_need = None
+    forecast_gap = None
+    try:
+        _, rows = await _ds_query(ds, """
+            SELECT d, forecast_qty FROM sales_forecast
+            WHERE sku_id='SKU0001' AND wh_id='WH1'
+              AND d>='2026-06-16' AND d<='2026-07-05' ORDER BY d
+        """)
+        forecast_need = sum(r[1] for r in rows)
+        in_transit_qty = next((r[2] for r in in_transit if r[0] == 'PO0001'), 500)
+        done_qty_fc = sum(r[3] for r in transfers if r[5] == "completed") if transfers else 0
+        forecast_gap = forecast_need - in_transit_qty - done_qty_fc
+        steps.append({"name": "db_query",
+                      "args": {"sql": "sales_forecast SKU0001@WH1 预测窗口"},
+                      "summary": f"到 7/5 预测需求 {forecast_need} − PO0001在途 {in_transit_qty} − 已调拨 {done_qty_fc} = 缺口 {forecast_gap}"})
+    except Exception:
+        gaps.append("销售预测（sales_forecast）")
+
     evidence_list = [
         Evidence(source_type="db_query", source_name="stock_anomaly_log",
                  evidence_text=f"SKU0001@WH1 自 6/15 起累计负库存 {neg} 次、低库存 {low} 次。",
@@ -463,6 +482,13 @@ async def analyze_inventory(ds: DataSource, query: str = "") -> tuple[SixSection
                            f"准时率降至 {ontime_post}），"
                            f"确认到货延迟根因在供应商侧产能/物流波动，而非采购下单不及时。"),
             related_metric="供应商提前期恶化", confidence=0.9))
+    if forecast_need is not None and forecast_gap is not None:
+        evidence_list.append(Evidence(
+            source_type="db_query", source_name="sales_forecast",
+            evidence_text=(f"按 7/5（PO0001 到货）前的销售预测，SKU0001@WH1 累计预测需求 {forecast_need} 件，"
+                           f"扣除在途 PO0001（500 件）与已完成调入调拨后仍缺口约 {forecast_gap} 件，"
+                           f"量化了到货前无法避免的断货敞口。"),
+            related_metric="到货前预测需求缺口", confidence=0.85))
 
     key_metrics = [
         KeyMetric(metric_name="负库存事件数", metric_value=str(neg), metric_period="2026-06-15起"),
@@ -489,10 +515,15 @@ async def analyze_inventory(ds: DataSource, query: str = "") -> tuple[SixSection
             metric_name="跨仓调拨量（已完成/在途）",
             metric_value=f"{sum(r[3] for r in transfers if r[5] == 'completed')} / {sum(r[3] for r in transfers if r[5] == 'in_transit')} 件",
             metric_period="dim_warehouse_transfer"))
+    if forecast_need is not None and forecast_gap is not None:
+        key_metrics.append(KeyMetric(
+            metric_name="到7/5预测需求/缺口",
+            metric_value=f"{forecast_need} 件 / 缺口 {forecast_gap} 件",
+            metric_period="sales_forecast 6/16~7/5"))
 
     if not gaps:
-        missing_data_text = ("已覆盖异常事件 / 库存趋势 / 采购单 / 安全阈值 / 在途多单 / 跨仓调拨 / 供应商提前期七项维度；"
-                             "如需更细可引入销售预测或上游二级供应商交付率。")
+        missing_data_text = ("已覆盖异常事件 / 库存趋势 / 采购单 / 安全阈值 / 在途多单 / 跨仓调拨 / 供应商提前期 / 销售预测八项维度；"
+                             "如需更细可引入上游二级供应商交付率或分时销售明细。")
     else:
         missing_data_text = "剩余缺口：" + "；".join(gaps) + "。如需进一步定位，请补齐后再分析。"
 

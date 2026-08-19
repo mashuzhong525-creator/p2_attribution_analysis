@@ -5,12 +5,12 @@ const toasts = ref([])
 let toastId = 0
 
 function onToast(e) {
-  const { msg, type } = e.detail || {}
+  const { msg, type, duration } = e.detail || {}
   const id = ++toastId
   toasts.value.push({ id, msg, type: type || 'info' })
   setTimeout(() => {
     toasts.value = toasts.value.filter((t) => t.id !== id)
-  }, 3200)
+  }, typeof duration === 'number' ? duration : 3200)
 }
 
 onMounted(() => window.addEventListener('toast', onToast))

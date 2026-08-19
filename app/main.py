@@ -23,6 +23,7 @@ from app.domains.agent.tools import register_all
 from app.domains.attachment.router import router as attachment_router
 from app.domains.auth.keys import oidc_keys
 from app.domains.auth.router import router as auth_router
+from app.domains.auth.users_router import router as auth_users_router
 from app.domains.chat.router import router as chat_router
 from app.domains.config.router import router as config_router
 from app.domains.datasource.router import router as datasource_router
@@ -69,6 +70,7 @@ app.add_exception_handler(BizError, biz_error_handler)
 
 # ---- 路由注册 ----
 app.include_router(auth_router)
+app.include_router(auth_users_router)
 app.include_router(chat_router)
 app.include_router(task_router)
 app.include_router(config_router)

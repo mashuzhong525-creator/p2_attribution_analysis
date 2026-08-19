@@ -157,7 +157,13 @@ function bindWs() {
         if (p.task_status === 'running') { startClock(); stepTick(p.current_step) }
         else if (['success', 'failed', 'cancelled'].includes(p.task_status)) { stopClock(); stepTick(p.current_step, true) }
         else stepTick(p.current_step)
-      } else msgStore.applyEvent(env)
+      } else {
+        // 终态事件到达时主动同步 task 状态，避免 WS 只丢 success 帧导致 UI 永久卡在 running
+        if (t === 'result_ready') syncTaskTerminal(env.task_id, 'success', env.payload?.current_step)
+        else if (t === 'cancelled') syncTaskTerminal(env.task_id, 'cancelled')
+        else if (t === 'error') syncTaskTerminal(env.task_id, 'failed')
+        msgStore.applyEvent(env)
+      }
       scrollBottom()
     }
     wsClient.on(t, handlers[t])
@@ -166,6 +172,17 @@ function bindWs() {
   handlers.disconnected = () => window.$toast('实时通道断开，重连中…', 'warn')
   wsClient.on('connected', handlers.connected)
   wsClient.on('disconnected', handlers.disconnected)
+}
+
+// 仅在 taskStore 当前未记录终态时回填，避免覆盖后端更精确的状态
+function syncTaskTerminal(taskId, status, currentStep) {
+  if (!taskId) return
+  const cur = taskStore.byId[taskId]
+  if (cur && ['success', 'failed', 'cancelled'].includes(cur.task_status)) return
+  const patch = { task_id: taskId, task_status: status }
+  if (typeof currentStep === 'number') patch.current_step = currentStep
+  taskStore.byId[taskId] = { ...(cur || {}), ...patch }
+  if (status === 'success') { stopClock(); stepTick(currentStep || maxSteps, true) }
 }
 function unbindWs() {
   Object.entries(handlers).forEach(([t, fn]) => wsClient.off(t, fn))
@@ -269,13 +286,19 @@ async function logout() {
 }
 
 // ---- 发送 ----
+const composing = ref(false) // 中文输入法组合态：组合中按 Enter 仅上屏候选词，不触发发送
 async function send() {
   const content = input.value.trim()
-  if (!content || !currentConv.value) return
+  if (!content) return
+  if (!currentConv.value) {
+    window.$toast('请先选择或新建分析任务', 'warn')
+    return
+  }
   input.value = ''
   const cid = currentConv.value.conversation_id
+  const localId = 'local-' + Date.now()
   msgStore.byConv[cid] = msgStore.byConv[cid] || []
-  msgStore.byConv[cid].push({ message_id: 'local-' + Date.now(), role: 'user', message_type: 'text', content, seq_no: Date.now() })
+  msgStore.byConv[cid].push({ message_id: localId, role: 'user', message_type: 'text', content, seq_no: Date.now() })
   scrollBottom()
   try {
     const res = await taskStore.send(cid, content)
@@ -284,7 +307,26 @@ async function send() {
       content: '', seq_no: Date.now() + 1, task_id: res.task_id
     })
     startPoll(res.task_id)
-  } catch (e) { window.$toast(e.message, 'error') }
+  } catch (e) {
+    // 发送失败：撤回乐观插入的用户消息并恢复输入内容，避免「消息消失/看似发出但无反应」
+    const arr = msgStore.byConv[cid]
+    const idx = arr.findIndex((m) => m.message_id === localId)
+    if (idx >= 0) arr.splice(idx, 1)
+    if (!input.value.trim()) input.value = content
+    if (e.code === 'TASK_BUSY') {
+      window.$toast('当前分析任务尚未结束，请等待完成或先取消后重试', 'warn', 6000)
+    } else if (e.code === 'TASK_QUEUE_FULL') {
+      window.$toast('任务队列已满，请稍后再试', 'warn', 6000)
+    } else if (e.status === 401) {
+      window.$toast('登录态已过期，请重新登录', 'error', 6000)
+    } else {
+      window.$toast(e.message || '发送失败，请重试', 'error', 6000)
+    }
+  }
+}
+function onEnterSend() {
+  if (composing.value) return // IME 候选词上屏阶段不发送
+  send()
 }
 function startPoll(taskId) {
   clearInterval(pollTimer.value)
@@ -494,7 +536,8 @@ onUnmounted(() => {
       <!-- 输入区 -->
       <div class="chat-input">
         <textarea class="textinput" v-model="input" rows="2" placeholder="输入你的分析需求，Enter 发送，Shift+Enter 换行…"
-                  @keydown.enter.exact.prevent="send" @keydown.shift.enter.prevent></textarea>
+                  @compositionstart="composing = true" @compositionend="composing = false"
+                  @keydown.enter.exact.prevent="onEnterSend" @keydown.shift.enter.prevent></textarea>
         <div class="input-bar">
           <span class="hint">Enter 发送 · Shift+Enter 换行</span>
           <span class="spacer"></span>

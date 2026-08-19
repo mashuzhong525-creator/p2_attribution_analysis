@@ -89,6 +89,9 @@ services:
       # JWT 签名私钥（多行 PEM 无法放 .env，改为挂载 secrets 目录，entrypoint 读取文件注入）。
       # 目录常在（内含 README），pem 文件不存在时 entrypoint 跳过，不影响开发环境。
       - ./secrets:/run/secrets:ro
+      # 运行时数据（上传附件/导出结论/工作区/日志）：bind mount 到宿主机项目目录 ./data，
+      # 避免容器重建导致上传的文件丢失（容器可写层会被替换，仅靠 MySQL 记录会指向不存在的文件）。
+      - ./data:/app/data
     ports:
       # 仅绑定本机回环：外部流量一律走 frontend(8080) 反代，backend 不直接暴露
       - "127.0.0.1:8001:8000"

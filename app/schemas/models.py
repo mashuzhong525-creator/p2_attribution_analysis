@@ -229,3 +229,36 @@ class LogItemOut(BaseModel):
 class AdminGenericOut(BaseModel):
     status: str
     message: str
+
+
+# ---------------- Admin: 用户管理（管理员新增用户 + 控制权限 + 首登强制改密） ----------------
+class AdminUserCreate(BaseModel):
+    username: str = Field(..., min_length=2, max_length=64, description="登录名")
+    display_name: str = Field(..., min_length=1, max_length=64, description="显示名")
+    role: str = Field("analyst", description="角色：admin / analyst / viewer")
+    password: str = Field(..., min_length=8, max_length=128, description="初始密码（≥8位）")
+
+
+class AdminUserUpdate(BaseModel):
+    display_name: str | None = Field(default=None, max_length=64)
+    role: str | None = Field(default=None, description="admin / analyst / viewer")
+    status: str | None = Field(default=None, description="active / disabled")
+    password: str | None = Field(default=None, min_length=8, max_length=128,
+                                  description="重置密码（传则记为首登待改密）")
+
+
+class AdminUserOut(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    role: str
+    status: str
+    must_change_password: bool = False
+    created_at: str | None = None
+
+
+class AdminUserListOut(BaseModel):
+    items: list[AdminUserOut]
+    total: int
+    page: int
+    page_size: int

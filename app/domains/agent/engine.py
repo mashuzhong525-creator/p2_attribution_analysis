@@ -418,11 +418,13 @@ async def run_task(task_id: str) -> None:
             if conv is None:
                 raise RuntimeError("会话不存在")
             ds = await db.get(DataSource, conv.data_source_id) if conv.data_source_id else None
-            # ==== 语义半径前置闸门（在线/离线共用）====
-            # query 与会话绑定的场景库主题无关时，直接产出"不在分析半径"六段式，
-            # 不进入 LLM 在线路径——避免 LLM 对闲聊/通用问题硬凑出"数据版笑话"类回答。
-            # 例外：会话已上传附件 → 用户明显在基于附件做分析，跳过拒答，让 LLM 在线读附件作答。
-            if ds is not None and ds.database in ("scenario_goods", "scenario_inventory"):
+            # ==== 语义半径前置闸门（仅离线确定性路径使用）====
+            # query 与会话绑定的场景库主题无关时，离线确定性路径拿不到关键指标/证据，
+            # 直接产出"不在分析半径"六段式（0 指标、0 证据、明确拒答说明）。
+            # 但若已配置 LLM（在线路径可用），不在范围内的通用/闲聊 query 不再硬拒答，
+            # 交回在线 Agent 用通用能力 + db_query/附件作答，从而得到真正的指标与证据链。
+            if (ds is not None and ds.database in ("scenario_goods", "scenario_inventory")
+                    and not llm.available):
                 kind = "goods" if ds.database == "scenario_goods" else "inventory"
                 q = (task.input_text or "").strip()
                 if not is_query_in_scope(q, kind):

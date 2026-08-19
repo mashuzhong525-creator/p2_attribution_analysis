@@ -14,6 +14,7 @@ const auth = useAuthStore()
 const TABS = [
   { key: 'config', label: '系统配置' },
   { key: 'datasource', label: '数据源' },
+  { key: 'users', label: '用户管理' },
   { key: 'flags', label: '功能开关' },
   { key: 'logs', label: '运行日志' },
   { key: 'costs', label: 'LLM 成本' },
@@ -170,9 +171,82 @@ async function fetchAudit(page = 1) {
 // Tab 切换时懒加载
 function onTab(key) {
   tab.value = key
+  if (key === 'users' && !usersLoaded.value) fetchUsers(1)
   if (key === 'logs' && !logsTotal.value) fetchLogs(1)
   if (key === 'costs' && !costKpi.value) fetchCosts(1)
   if (key === 'audit' && !auditTotal.value) fetchAudit(1)
+}
+
+// ==================== 用户管理（新建 / 权限 / 首登强制改密） ====================
+const users = ref([])
+const usersTotal = ref(0)
+const usersPage = ref(1)
+const usersLoaded = ref(false)
+const usersLoading = ref(false)
+const userForm = ref({ show: false, id: null, username: '', display_name: '', role: 'analyst', password: '', new_password: '' })
+const ROLES = [
+  { v: 'admin', label: '管理员' },
+  { v: 'analyst', label: '分析师' },
+  { v: 'viewer', label: '只读' },
+]
+async function fetchUsers(page = 1) {
+  usersLoading.value = true
+  try {
+    const d = await api.get(`/api/admin/users?page=${page}&page_size=20`)
+    users.value = d.items; usersTotal.value = d.total; usersPage.value = d.page
+    usersLoaded.value = true
+  } catch (e) { window.$toast(e.message, 'error') }
+  finally { usersLoading.value = false }
+}
+function userRoleLabel(r) { return (ROLES.find(x => x.v === r) || {}).label || r }
+function openUserCreate() {
+  userForm.value = { show: true, id: null, username: '', display_name: '', role: 'analyst', password: '', new_password: '' }
+}
+function openUserEdit(u) {
+  userForm.value = {
+    show: true, id: u.id, username: u.username, display_name: u.display_name,
+    role: u.role, password: '', new_password: ''
+  }
+}
+async function saveUser() {
+  saving.value = true
+  const f = userForm.value
+  try {
+    if (f.id) {
+      const body = { display_name: f.display_name, role: f.role }
+      if (f.new_password) body.password = f.new_password
+      await api.put(`/api/admin/users/${f.id}`, body)
+      window.$toast('用户已更新', 'success')
+    } else {
+      await api.post('/api/admin/users', {
+        username: f.username, display_name: f.display_name, role: f.role, password: f.password
+      })
+      window.$toast('用户已创建，首次登录需改密', 'success')
+    }
+    userForm.value.show = false
+    await fetchUsers(usersPage.value)
+  } catch (e) { window.$toast(e.message, 'error') }
+  finally { saving.value = false }
+}
+const userDelTarget = ref(null)
+function askUserDelete(u) { userDelTarget.value = u }
+async function confirmUserDelete() {
+  const t = userDelTarget.value
+  if (!t) return
+  try {
+    await api.del(`/api/admin/users/${t.id}`)
+    window.$toast('用户已删除/禁用', 'success')
+    await fetchUsers(usersPage.value)
+  } catch (e) { window.$toast(e.message, 'error') }
+  userDelTarget.value = null
+}
+async function toggleUserStatus(u) {
+  const next = u.status === 'active' ? 'disabled' : 'active'
+  try {
+    await api.put(`/api/admin/users/${u.id}`, { status: next })
+    u.status = next
+    window.$toast(next === 'active' ? '已启用' : '已禁用', 'success')
+  } catch (e) { window.$toast(e.message, 'error') }
 }
 
 // 辅助
@@ -264,7 +338,78 @@ function logout() { auth.logout().then(() => router.push('/login')) }
         </table>
       </div>
 
-      <!-- ===== Tab3 功能开关 ===== -->
+      <!-- ===== Tab3 用户管理 ===== -->
+      <div v-else-if="tab === 'users'">
+        <div class="info-bar">管理员可新增用户、分配角色（管理员/分析师/只读）、启停账号、重置密码。新建或重置密码的用户首次登录必须修改密码才能使用。</div>
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+          <button class="btn primary sm" @click="openUserCreate()">＋ 新增用户</button>
+        </div>
+        <table class="table">
+          <thead><tr><th>登录名</th><th>显示名</th><th>角色</th><th>状态</th><th>首登待改密</th><th>创建时间</th><th style="width: 210px;">操作</th></tr></thead>
+          <tbody>
+            <tr v-for="u in users" :key="u.id">
+              <td class="mono">{{ u.username }}</td>
+              <td>{{ u.display_name }}</td>
+              <td><span class="chip" :class="u.role === 'admin' ? 'primary' : ''">{{ userRoleLabel(u.role) }}</span></td>
+              <td><span class="chip" :class="u.status === 'active' ? 'success' : 'cancelled'" @click="toggleUserStatus(u)" style="cursor: pointer;">{{ u.status === 'active' ? '已启用' : '已禁用' }}</span></td>
+              <td>{{ u.must_change_password ? '是' : '—' }}</td>
+              <td class="mono">{{ fmtDt(u.created_at) }}</td>
+              <td>
+                <button class="btn sm" @click="openUserEdit(u)">编辑</button>
+                <button class="btn sm danger" @click="askUserDelete(u)">删除</button>
+              </td>
+            </tr>
+            <tr v-if="!usersLoading && !users.length"><td colspan="7" class="empty">暂无用户</td></tr>
+          </tbody>
+        </table>
+        <div class="pager" v-if="pageCount(usersTotal, 20) > 1">
+          <button class="pg" :disabled="usersPage <= 1" @click="fetchUsers(usersPage - 1)">‹</button>
+          <button v-for="i in pageList(usersTotal, usersPage, 20)" :key="i" class="pg" :class="{ on: i === usersPage }" @click="fetchUsers(i)">{{ i }}</button>
+          <button class="pg" :disabled="usersPage >= pageCount(usersTotal, 20)" @click="fetchUsers(usersPage + 1)">›</button>
+        </div>
+
+        <!-- 新增/编辑用户弹窗 -->
+        <div v-if="userForm.show" class="modal-mask" @click.self="userForm.show = false">
+          <div class="modal">
+            <div class="mh">{{ userForm.id ? '编辑用户' : '新增用户' }}</div>
+            <div class="mb">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <label class="f-label" v-if="!userForm.id">登录名<input class="textinput" v-model="userForm.username" placeholder="如 zhangwei" /></label>
+                <label class="f-label" v-if="!userForm.id">初始密码<input class="textinput" type="password" v-model="userForm.password" placeholder="≥8位，首登需改密" /></label>
+                <label class="f-label" style="grid-column: 1 / -1;">显示名<input class="textinput" v-model="userForm.display_name" placeholder="如 张伟" /></label>
+                <label class="f-label" style="grid-column: 1 / -1;">
+                  角色
+                  <select class="textinput" v-model="userForm.role">
+                    <option v-for="r in ROLES" :key="r.v" :value="r.v">{{ r.label }}</option>
+                  </select>
+                </label>
+                <label class="f-label" style="grid-column: 1 / -1;" v-if="userForm.id">重置密码<input class="textinput" type="password" v-model="userForm.new_password" placeholder="留空则不重置；重置后首登需改密" /></label>
+              </div>
+              <div v-if="userForm.id" class="note" style="margin: 10px 0 0;">用户名不可修改；重置密码后该用户下次登录将强制改密。</div>
+            </div>
+            <div class="mf">
+              <button class="btn" @click="userForm.show = false">取消</button>
+              <button class="btn primary" :disabled="saving" @click="saveUser">{{ saving ? '保存中…' : '保存' }}</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 删除确认 -->
+        <div v-if="userDelTarget" class="modal-mask" @click.self="userDelTarget = null">
+          <div class="modal">
+            <div class="mh">删除用户</div>
+            <div class="mb">
+              <div class="note" style="margin: 0;">确定删除/禁用 <b>{{ userDelTarget.username }}</b> 吗？该用户将无法登录。</div>
+            </div>
+            <div class="mf">
+              <button class="btn" @click="userDelTarget = null">取消</button>
+              <button class="btn danger" @click="confirmUserDelete">确认删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Tab4 功能开关 ===== -->
       <div v-else-if="tab === 'flags'">
         <div class="info-bar">功能开关走 system_configs（bool），切换即时生效（PRD 6.8），变更写 audit_logs。</div>
         <div style="background: var(--paper); border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden;">

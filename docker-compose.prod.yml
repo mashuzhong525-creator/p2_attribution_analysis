@@ -1,0 +1,41 @@
+# 生产数据持久化覆盖文件（docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build）
+# 作用：把 MySQL / Redis 数据落到云数据盘 /data/bia，Redis 开启 AOF；其余沿用 docker-compose.yml。
+# 注意：首次在生产机执行前，先创建目录并授权：
+#   mkdir -p /data/bia/mysql /data/bia/redis /data/bia/appdata
+#   chown -R 999:999 /data/bia/mysql      # MySQL 官方镜像内 uid=999
+#   chown -R 999:999 /data/bia/redis      # redis 镜像内 uid=999
+#   chown -R 1000:1000 /data/bia/appdata  # 后端容器内默认 uid（如不符以 id -u 为准）
+# 然后：docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+name: bia
+
+services:
+  mysql:
+    volumes:
+      # 数据落盘到独立数据盘（可快照/可扩容/可迁移），替代默认命名卷
+      - /data/bia/mysql:/var/lib/mysql
+      - ./scripts/mysql-init:/docker-entrypoint-initdb.d:ro
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      # AOF+RDB 持久化：防止容器重建后 WS seq 归零导致前端流式更新失效
+      - /data/bia/redis:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  backend:
+    volumes:
+      # 上传附件/导出结论/工作区/日志落盘到数据盘
+      - /data/bia/appdata:/app/data
+      - ./secrets:/run/secrets:ro
