@@ -97,12 +97,13 @@ services:
         limits:
           memory: 768M
 
-  # ===== 前端（Vue3 构建 + nginx 托管，/api 与 WS 反代到 backend）=====
+# ===== 前端（Vue3 构建 + nginx 托管，/api 与 WS 反代到 backend）=====
   frontend:
     build: ./frontend
     depends_on:
       - backend
     ports:
+      # 8080 对外暴露：前端入口，nginx 反代 /api 与 WS 到 backend
       - "8080:80"
     deploy:
       resources:
