@@ -12,6 +12,7 @@ class WsClient {
     this.ws = null
     this.conversationId = null
     this.token = null
+    this.tokenRefresher = null // async (conversationId) => newToken，重连前刷新一次性令牌
     this.maxSeq = 0
     this.pending = new Map() // seq -> envelope（乱序缓存）
     this.handlers = new Map() // type -> [fn]
@@ -39,6 +40,9 @@ class WsClient {
   }
 
   async connect(conversationId, token) {
+    // 换会话/重连前重置序号基线，防止旧会话高水位误杀新会话事件
+    this.maxSeq = 0
+    this.pending.clear()
     this.conversationId = conversationId
     this.token = token
     await this._open()
@@ -73,6 +77,10 @@ class WsClient {
     try { env = JSON.parse(e.data) } catch { return }
     if (env.type === 'ping') { this._sendRaw('pong'); return }
     if (env.seq === undefined) { this._emit(env.type, env); return }
+    if (this.maxSeq === 0 && env.seq > 1) {
+      // 连接前已广播的事件无法重放，以首事件为基线，避免乱序缓存永远等不到 seq=1
+      this.maxSeq = env.seq - 1
+    }
     if (env.seq <= this.maxSeq) return // 去重
     if (env.seq === this.maxSeq + 1) {
       this._process(env)
@@ -119,10 +127,14 @@ class WsClient {
     this.reconnecting = true
     const delay = Math.min(30000, 1000 * 2 ** this.retry)
     this.retry += 1
-    setTimeout(() => {
+    setTimeout(async () => {
       this.reconnecting = false
       if (this.token && this.conversationId) {
         this._emit('reconnecting', {})
+        try {
+          // 一次性令牌被消费后无法复用，重连前必须先换新 token
+          if (this.tokenRefresher) this.token = await this.tokenRefresher(this.conversationId)
+        } catch { /* 刷新失败沿用旧 token 重试 */ }
         this._open().catch(() => this._scheduleReconnect())
       }
     }, delay)

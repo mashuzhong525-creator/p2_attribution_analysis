@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime, time
+from decimal import Decimal
 
 import asyncmy
 
@@ -106,7 +108,16 @@ class DbQueryTool(Tool):
             await cur.execute(safe_sql)
             rows = await cur.fetchall()
             cols = [d[0] for d in cur.description] if cur.description else []
-            data_rows = [list(r) for r in rows]
+            # JSON 安全化：datetime/date/time → isoformat 字符串，Decimal → float（否则 WS 推送 TypeError）
+            data_rows = [
+                [
+                    None if v is None
+                    else (v.isoformat() if isinstance(v, (datetime, date, time))
+                          else (float(v) if isinstance(v, Decimal) else v))
+                    for v in r
+                ]
+                for r in rows
+            ]
             summary = f"查询返回 {len(data_rows)} 行，{len(cols)} 列"
             return ToolResult(success=True, summary=summary, data={"columns": cols, "rows": data_rows})
         except Exception as e:  # noqa: BLE001

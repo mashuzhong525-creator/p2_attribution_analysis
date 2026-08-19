@@ -36,8 +36,9 @@ export const useMessageStore = defineStore('message', {
         this.streaming[task_id].text += payload.delta_text
       }
       if (type === 'tool_start') {
+        const arg = payload.args ? JSON.stringify(payload.args) : ''
         this.tools[task_id] = this.tools[task_id] || []
-        this.tools[task_id].push({ name: payload.name, status: 'running', summary: '' })
+        this.tools[task_id].push({ name: payload.name, status: 'running', summary: '', arg: arg.slice(0, 60), t0: Date.now() })
       }
       if (type === 'tool_end') {
         const arr = this.tools[task_id] || []
@@ -45,6 +46,8 @@ export const useMessageStore = defineStore('message', {
         if (t && t.name === payload.name) {
           t.status = payload.success ? 'success' : 'failed'
           t.summary = payload.summary || payload.error || ''
+          t.duration = t.t0 ? Math.round((Date.now() - t.t0) / 100) / 10 : null
+          t.table = payload.table || null
         }
       }
       if (type === 'result_ready') {

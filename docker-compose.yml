@@ -1,7 +1,13 @@
 # 经营归因分析系统 · Docker Compose
 # 独立 Docker 环境：顶层 name=bia → 容器/网络/卷均以 bia- 前缀隔离，不与其它项目共用。
-# 当前启用：mysql / redis / backend（frontend 见 T10 同步落地后启用）。
-# 资源约束：2C2G，backend 连接池/并发已按此收敛。
+# 当前启用：mysql / redis / backend / frontend。
+# 资源约束：2C2G（4C4G 服务器的一半），backend 连接池/并发已按此收敛。
+#
+# ===== 上线安全要点（勿回退）=====
+# 1. mysql / redis 端口仅绑定 127.0.0.1 —— 本机开发可用，公网不可达；
+# 2. backend 仅绑定 127.0.0.1:8001，外部只能走 frontend(8080) 的 nginx 反代；
+# 3. 生产密钥（数据库密码、OIDC_CLIENT_SECRET、APP_ENCRYPTION_KEY）写在 .env，不落默认值；
+# 4. JWT 签名私钥放 ./secrets/oidc_rsa_private.pem（.gitignore 已排除 *.pem）。
 
 name: bia
 
@@ -9,31 +15,46 @@ services:
   mysql:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME:-bia}
       MYSQL_USER: ${DB_USER:-bia}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-bia_password}
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+      MYSQL_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
+    # 2G 内存预算下关闭 performance_schema、收敛缓冲池
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_0900_ai_ci
+      --performance-schema=OFF
+      --innodb-buffer-pool-size=256M
     volumes:
       - mysql_data:/var/lib/mysql
       - ./scripts/mysql-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "3306:3306"
+      # 仅绑定本机回环：本地开发可连 localhost:3306，公网不可达
+      - "127.0.0.1:3306:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:?}"]
       interval: 10s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 768M
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      # 仅绑定本机回环：本地开发可连 localhost:6379，公网不可达
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
   backend:
     build: .
@@ -42,13 +63,13 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       DB_USER: ${DB_USER:-bia}
-      DB_PASSWORD: ${DB_PASSWORD:-bia_password}
+      DB_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
       DB_NAME: ${DB_NAME:-bia}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       OIDC_ISSUER: http://backend:8000
       OIDC_CLIENT_ID: bia-web
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-change-me-client-secret}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?请在 .env 中设置 OIDC_CLIENT_SECRET}
       OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:8080/auth/callback}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
       FLAG_SCENARIO_DATA: ${FLAG_SCENARIO_DATA:-true}
@@ -56,24 +77,37 @@ services:
       FLAG_ATTACHMENT: ${FLAG_ATTACHMENT:-true}
       FLAG_EXTERNAL_DS: ${FLAG_EXTERNAL_DS:-false}
       FLAG_RESULT_GENERATE: ${FLAG_RESULT_GENERATE:-false}
-      WS_MAX_CONNECTIONS: 10
-      TASK_CONCURRENCY_LIMIT: 3
-      CORS_ORIGINS: '["http://localhost:8080","http://localhost:5173"]'
+      WS_MAX_CONNECTIONS: ${WS_MAX_CONNECTIONS:-10}
+      TASK_CONCURRENCY_LIMIT: ${TASK_CONCURRENCY_LIMIT:-3}
+      CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost:8080"]}'
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      # JWT 签名私钥（多行 PEM 无法放 .env，改为挂载 secrets 目录，entrypoint 读取文件注入）。
+      # 目录常在（内含 README），pem 文件不存在时 entrypoint 跳过，不影响开发环境。
+      - ./secrets:/run/secrets:ro
     ports:
-      - "8000:8000"
+      # 仅绑定本机回环：外部流量一律走 frontend(8080) 反代，backend 不直接暴露
+      - "127.0.0.1:8001:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 768M
 
-  # ===== T10：前端（Vue3 构建 + nginx 托管，/api 与 WS 反代到 backend）=====
+  # ===== 前端（Vue3 构建 + nginx 托管，/api 与 WS 反代到 backend）=====
   frontend:
     build: ./frontend
     depends_on:
       - backend
     ports:
       - "8080:80"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
 
 volumes:
   mysql_data:

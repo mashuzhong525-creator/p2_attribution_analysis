@@ -42,10 +42,16 @@ class ConnectionManager:
                     self._conns.pop(conv_id, None)
 
     async def send(self, conv_id: str, envelope: dict) -> None:
-        for ws in list(self._conns.get(conv_id, set())):
+        conns = list(self._conns.get(conv_id, set()))
+        if not conns:
+            return
+        for ws in conns:
             try:
-                await ws.send_json(envelope)
-            except Exception:  # pragma: no cover
+                await asyncio.wait_for(ws.send_json(envelope), timeout=3)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # pragma: no cover
+                logger.warning("WS 推送失败（%s）conversation=%s，清理连接", type(e).__name__, conv_id)
                 await self.disconnect(conv_id, ws)
 
     def has(self, conv_id: str) -> bool:
@@ -55,14 +61,25 @@ class ConnectionManager:
         """心跳：定时向所有连接发送控制 ping（不带 seq）。"""
         while True:
             await asyncio.sleep(interval)
-            ping = {"v": 1, "type": "ping", "ts": datetime.now(timezone.utc).isoformat()}
-            async with self._lock:
-                targets = [ws for s in self._conns.values() for ws in s]
-            for ws in targets:
-                try:
-                    await ws.send_json(ping)
-                except Exception:  # pragma: no cover
-                    pass
+            try:
+                ping = {"v": 1, "type": "ping", "ts": datetime.now(timezone.utc).isoformat()}
+                async with self._lock:
+                    targets = [ws for s in self._conns.values() for ws in s]
+                sent = 0
+                for ws in targets:
+                    try:
+                        await asyncio.wait_for(ws.send_json(ping), timeout=3)
+                        sent += 1
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:  # pragma: no cover
+                        pass
+                if targets:
+                    logger.info("WS 心跳广播 %d/%d 连接", sent, len(targets))
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - 心跳异常不得终止循环
+                logger.exception("WS 心跳广播异常")
 
 
 manager = ConnectionManager()

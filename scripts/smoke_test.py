@@ -32,9 +32,10 @@ QUESTION = os.environ.get(
 QUESTION2 = os.environ.get(
     "BIA_QUESTION2", "华东仓 SKU0001 缺货原因是什么？请做归因分析"
 )
-TIMEOUT = 60.0
+TIMEOUT = 180.0  # LLM 在线路径多步工具循环耗时较长，预留 3 分钟
 
-client = httpx.Client(base_url=BASE, timeout=15.0)
+# trust_env=False：忽略系统/环境代理，确保本机直连测试目标（Windows 系统代理会劫持 localhost 请求返回 502）
+client = httpx.Client(base_url=BASE, timeout=15.0, trust_env=False)
 
 
 def check(name: str, ok: bool, detail: str = "") -> None:
@@ -99,6 +100,24 @@ def run_scenario(headers: dict, ds: dict, question: str) -> None:
             f"六段式结果({ds['database']})",
             r.status_code == 200 and not missing,
             f"缺失字段={missing or '无'} 指标数={len(res.get('key_metrics') or [])} 证据数={len(res.get('evidence_list') or [])}",
+        )
+
+        # 结果导出与下载（2.1.13 验收第 6 条）
+        r = client.post(f"/api/results/{task_id}/export", headers=headers)
+        exp = r.json()
+        check(
+            f"结果导出({ds['database']})",
+            r.status_code == 200 and bool(exp.get("result_id")) and bool(exp.get("result_file_path")),
+            f"status={r.status_code} body={r.text[:160]}",
+        )
+        r = client.get(f"/api/results/download/{exp.get('result_id')}", headers=headers)
+        markdown = (res.get("result_markdown") or "").strip()
+        check(
+            f"结果下载({ds['database']})",
+            r.status_code == 200
+            and r.content
+            and r.content.decode("utf-8", errors="replace").strip() == markdown,
+            f"status={r.status_code} 文件字节={len(r.content or b'')}",
         )
 
         # 会话历史包含用户消息与结果消息

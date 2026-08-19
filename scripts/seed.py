@@ -75,9 +75,9 @@ AUTH_USERS = [
 ]
 
 DATA_SOURCES = [
-    # 场景示例库账号密码与 MySQL 初始化一致（跟随环境变量，避免硬编码漂移）
-    ("商品目录优化示例库", "scenario_goods", "mysql", "mysql", 3306, "scenario_goods", "bia", settings.DB_PASSWORD, True, True),
-    ("库存异常分析示例库", "scenario_inventory", "mysql", "mysql", 3306, "scenario_inventory", "bia", settings.DB_PASSWORD, True, True),
+    # 场景示例库：host 跟随 settings.DB_HOST（容器内=mysql 服务名，本地=localhost），避免硬编码漂移导致连接失败
+    ("商品目录优化示例库", "scenario_goods", "mysql", settings.DB_HOST, 3306, "scenario_goods", "bia", settings.DB_PASSWORD, True, True),
+    ("库存异常分析示例库", "scenario_inventory", "mysql", settings.DB_HOST, 3306, "scenario_inventory", "bia", settings.DB_PASSWORD, True, True),
     ("外部业务库 bi-prod", "bi-prod", "mysql", "10.0.0.8", 3306, "bi_warehouse", "bi_ro", "bi_pass", True, False),
 ]
 

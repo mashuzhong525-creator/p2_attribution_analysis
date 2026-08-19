@@ -36,10 +36,14 @@ export const useTaskStore = defineStore('task', {
       const t = env.payload || {}
       this.byId[t.task_id] = { ...(this.byId[t.task_id] || {}), ...t }
     },
-    // 连接会话：取 ws-token 并建连
+    // 连接会话：取 ws-token 并建连；自动重连时同样刷新一次性令牌
     async connectWs(conversationId) {
-      const { websocket_token: token } = await api.post('/api/chat/ws-token', { conversation_id: conversationId })
-      await wsClient.connect(conversationId, token)
+      const mint = async () => {
+        const { websocket_token: token } = await api.post('/api/chat/ws-token', { conversation_id: conversationId })
+        return token
+      }
+      wsClient.tokenRefresher = mint
+      await wsClient.connect(conversationId, await mint())
     }
   }
 })

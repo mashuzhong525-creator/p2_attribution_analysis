@@ -38,6 +38,8 @@ def build_system_prompt(
     parts.append(SIX_SECTION_TEMPLATE)
     parts.append(
         "【硬性约束】所有结论必须基于工具返回的真实数据；禁止编造指标。"
+        "工具执行失败（如数据库不可用、查询报错）时，禁止输出任何具体指标值、百分比或推断性结论，"
+        "应在 missing_data_text 中明确说明数据获取失败的原因与缺失项。"
         "最终必须调用一次 result 形式的六段式 JSON 输出。"
     )
     return "\n\n".join(parts)

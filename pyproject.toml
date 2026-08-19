@@ -3,3 +3,8 @@ name = "p2-attribution-analysis"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = []
+
+[tool.pytest.ini_options]
+# 禁用 pytest 缓存写盘：规避 .pytest_cache 权限异常；
+# basetemp 由 tests/conftest.py 动态分配唯一目录（规避 WorkBuddy 安全钩子拦截 rmtree 清理）
+addopts = "-p no:cacheprovider"

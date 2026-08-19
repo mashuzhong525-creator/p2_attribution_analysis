@@ -55,13 +55,13 @@ async function logout() {
       <h1>修改初始密码</h1>
       <p class="muted">首次登录需修改密码后才能继续使用系统</p>
       <label>当前密码
-        <input type="password" v-model="oldPassword" autocomplete="current-password" />
+        <input class="textinput" type="password" v-model="oldPassword" autocomplete="current-password" />
       </label>
       <label>新密码（至少 8 位）
-        <input type="password" v-model="newPassword" autocomplete="new-password" />
+        <input class="textinput" type="password" v-model="newPassword" autocomplete="new-password" />
       </label>
       <label>确认新密码
-        <input type="password" v-model="confirmPassword" autocomplete="new-password" />
+        <input class="textinput" type="password" v-model="confirmPassword" autocomplete="new-password" />
       </label>
       <p class="err" v-if="error">{{ error }}</p>
       <button class="btn primary block" :disabled="busy">{{ busy ? '提交中…' : '确认修改' }}</button>

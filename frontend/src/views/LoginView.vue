@@ -28,13 +28,22 @@ async function submit() {
 <template>
   <div class="login-wrap">
     <form class="login-card" @submit.prevent="submit">
+      <div class="login-logo" aria-hidden="true">
+        <span class="ll-main">📊</span>
+        <span class="ll-spark s1">✨</span>
+        <span class="ll-spark s2">🍃</span>
+      </div>
       <h1>经营归因分析系统</h1>
-      <p class="muted">对话式 BI · Agent 归因 · 六段式结论</p>
-      <label>用户名<input v-model="username" autocomplete="username" /></label>
-      <label>密码<input type="password" v-model="password" autocomplete="current-password" /></label>
-      <p class="err" v-if="error">{{ error }}</p>
-      <button class="btn primary block" :disabled="busy">{{ busy ? '登录中…' : '登 录' }}</button>
-      <p class="hint muted">初始账号 admin / admin123（认证库种子）</p>
+      <p class="login-sub muted">对话式 BI · Agent 自动归因 · 六段式结论</p>
+      <label>用户名
+        <input class="textinput" v-model="username" autocomplete="username" />
+      </label>
+      <label>密码
+        <input class="textinput" type="password" v-model="password" autocomplete="current-password" />
+      </label>
+      <p class="err" style="color: var(--red); margin: 0; font-size: 13px;" v-if="error">{{ error }}</p>
+      <button class="btn primary block" :disabled="busy">{{ busy ? '登录中…' : '授权登录 →' }}</button>
+      <p class="login-hint muted">通过统一身份认证登录 · 初始账号 admin / admin123</p>
     </form>
   </div>
 </template>

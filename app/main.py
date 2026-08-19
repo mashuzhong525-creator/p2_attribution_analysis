@@ -17,6 +17,7 @@ from app.core.config import ConfigCache, settings
 from app.core.db import AsyncSessionLocal
 from app.core.errors import BizError, biz_error_handler
 from app.core.security import jwt_verifier as _jwt
+from app.domains.admin.router import router as admin_monitor_router
 from app.domains.agent import engine as agent_engine
 from app.domains.agent.tools import register_all
 from app.domains.attachment.router import router as attachment_router
@@ -73,6 +74,7 @@ app.include_router(task_router)
 app.include_router(config_router)
 app.include_router(datasource_router)
 app.include_router(attachment_router)
+app.include_router(admin_monitor_router)
 # WS 路由（websocket 端点 /api/ws）
 app.include_router(ws_router)
 

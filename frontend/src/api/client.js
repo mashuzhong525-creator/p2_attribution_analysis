@@ -48,5 +48,11 @@ export const api = {
       if (!resp.ok) throw new Error(data.message || '上传失败')
       return data
     })
-  }
+  },
+
+  // 附件：列表 / 删除 / 下载
+  attachmentsList: (conversationId) =>
+    request('GET', `/api/attachments/list?conversation_id=${encodeURIComponent(conversationId)}`),
+  attachmentDel: (attId) => request('DELETE', `/api/attachments/${attId}`),
+  attachmentDownloadUrl: (attId) => BASE + `/api/attachments/${attId}/download`
 }

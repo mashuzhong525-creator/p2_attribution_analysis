@@ -94,6 +94,8 @@ async def send(
         task_status="queued",
     )
     db.add(task)
+    # 回填 task_id 到触发消息（前端据 message.task_id 定位当前任务，运行中/刷新后均可显示）
+    msg.task_id = task.id
     conv.last_message_at = datetime.now(timezone.utc)
     await db.commit()
 

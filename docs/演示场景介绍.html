@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>经营归因分析系统 · 演示场景介绍</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --paper: #ffffff;
+    --line: #e6e8eb;
+    --line-soft: #eef0f3;
+    --ink: #1f2328;
+    --sub: #57606a;
+    --gray: #8b949e;
+    --blue: #2563eb;
+    --blue-soft: #dbeafe;
+    --green: #10b981;
+    --green-soft: #d1fae5;
+    --orange: #f59e0b;
+    --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .layout { display: flex; min-height: 100vh; }
+
+  /* —— 左侧导航 —— */
+  aside {
+    width: 240px;
+    background: var(--paper);
+    border-right: 1px solid var(--line-soft);
+    padding: 18px 14px;
+    flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .brand {
+    font-weight: 700; font-size: 14px;
+    padding: 6px 8px 14px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--line-soft);
+    margin-bottom: 8px;
+  }
+  .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--blue); }
+  .nav-hd {
+    font-size: 11px; color: var(--gray);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 10px 8px 4px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .nav-item:hover { background: #f3f4f6; }
+  .nav-item.active { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
+  .nav-item .ico { width: 16px; text-align: center; color: var(--gray); }
+  .nav-item.active .ico { color: var(--blue); }
+  .nav-foot { margin-top: auto; font-size: 11px; color: var(--gray); padding: 8px; }
+
+  /* —— 主区 —— */
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .hero {
+    padding: 56px 32px 36px;
+    text-align: center;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .hero .ico {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: var(--line-soft);
+    color: var(--gray);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    font-size: 28px; font-weight: 700;
+    margin: 0 0 8px;
+    color: var(--ink);
+  }
+  .hero p {
+    margin: 0 auto;
+    color: var(--sub);
+    font-size: 14px;
+    max-width: 580px;
+  }
+
+  /* —— 段区通用 —— */
+  .section {
+    padding: 28px 32px;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .section + .section { border-top: 1px solid var(--line-soft); }
+  .sec-hd {
+    display: flex; align-items: baseline; gap: 10px;
+    margin-bottom: 18px;
+  }
+  .sec-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--blue);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .sec-title { font-size: 16px; font-weight: 700; margin: 0; }
+  .sec-sub { font-size: 12px; color: var(--gray); }
+
+  /* —— 卡片网格（段一）—— */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 18px 16px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .card:hover { border-color: var(--blue); }
+  .card .ico-row {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    background: var(--blue-soft);
+    color: var(--blue);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .card.green .ico-row { background: var(--green-soft); color: var(--green); }
+  .card .t { font-size: 14px; font-weight: 700; margin: 0; }
+  .card .d { font-size: 12.5px; color: var(--sub); margin: 0; }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: var(--blue-soft);
+    color: var(--blue);
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .tag.green { background: var(--green-soft); color: var(--green); }
+  .tag.gray { background: var(--line-soft); color: var(--gray); }
+  .meta {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    font-size: 11.5px; color: var(--gray);
+    margin-top: 4px;
+  }
+
+  /* —— 表格（段二）—— */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--line-soft); }
+  th { background: #f7f8fa; font-weight: 600; color: var(--sub); font-size: 11.5px; }
+  tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { font-family: Consolas, Monaco, monospace; font-size: 12px; color: var(--ink); }
+
+  /* —— 操作流（段三）—— */
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .step {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative;
+  }
+  .step .n {
+    font-size: 11px; font-weight: 700;
+    color: var(--blue);
+    background: var(--blue-soft);
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 8px;
+  }
+  .step .t { font-size: 13.5px; font-weight: 700; margin: 0 0 4px; }
+  .step .d { font-size: 12px; color: var(--sub); margin: 0; line-height: 1.55; }
+  .example {
+    background: #f7f8fa;
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    color: var(--ink);
+    margin-top: 6px;
+  }
+  .footer-note {
+    text-align: center; font-size: 11.5px; color: var(--gray);
+    padding: 18px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--paper);
+  }
+
+  @media (max-width: 720px) {
+    aside { width: 180px; padding: 14px 8px; }
+    .hero { padding: 40px 18px 24px; }
+    .hero h1 { font-size: 22px; }
+    .section { padding: 22px 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- 左栏 -->
+  <aside>
+    <div class="brand"><span class="dot"></span> 经营归因分析 · 演示</div>
+    <div class="nav-hd">概览</div>
+    <div class="nav-item"><span class="ico">⌂</span>首页</div>
+    <div class="nav-item active"><span class="ico">✦</span>演示场景</div>
+    <div class="nav-item"><span class="ico">⊟</span>数据源</div>
+    <div class="nav-item"><span class="ico">⚙</span>系统配置</div>
+
+    <div class="nav-hd">账号</div>
+    <div class="nav-item"><span class="ico">●</span>admin / admin123</div>
+    <div class="nav-item"><span class="ico">●</span>analyst / Demo@2026</div>
+
+    <div class="nav-foot">v1.0 · 2C2G · MySQL 8 + Redis 7</div>
+  </aside>
+
+  <!-- 主区 -->
+  <main>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="ico">⌬</div>
+      <h1>两个业务场景演示</h1>
+      <p>面向经营归因分析场景的多轮对话系统——围绕真实业务问题持续追问、补充证据、生成阶段性结论和最终分析报告。</p>
+    </section>
+
+    <!-- 段一：场景介绍 -->
+    <section class="section">
+      <div class="sec-hd">
+        <span class="sec-num">1</span>
+        <h2 class="sec-title">演示场景与故事线</h2>
+        <span class="sec-sub">两个场景 · 确定性数据 · 已注入异常埋点</span>
+      </div>
+      <div class="cards">
+
+        <div class="card">
+          <div class="ico-row">🛒</div>
+          <h3 class="t">商品目录优化</h3>
+          <div class="meta">
+            <span class="tag">scenario_goods</span>
+            <span class="tag gray">~12 万行</span>
+          </div>
+          <p class="d">
+            <b>故事线：</b>"为什么 6 月信息流渠道点击量下滑？"<br/>
+            <b>异常埋点：</b>信息流主素材 6/3 更换为夏季版；头部 5 个 SKU 自 6/10 下架。
+          </p>
+          <div class="d" style="font-size: 11.5px; color: var(--gray);">
+            事实表：商品/类目/品牌/渠道/曝光·点击·转化/促销日历
+          </div>
+        </div>
+
+        <div class="card green">
+          <div class="ico-row">📦</div>
+          <h3 class="t">库存异常分析</h3>
+          <div class="meta">
+            <span class="tag green">scenario_inventory</span>
+            <span class="tag gray">~3 万行</span>
+          </div>
+          <p class="d">
+            <b>故事线：</b>"SKU0001 在华东仓为什么断货/负库存？"<br/>
+            <b>异常埋点：</b>SKU0001@WH1 自 6/15 起采购到货延迟（PO0001 ETA 7/5）→ 日销平稳但库存被耗至负值。
+          </p>
+          <div class="d" style="font-size: 11.5px; color: var(--gray);">
+            事实表：库存日快照（含入库/出库/周转）/ 销量 / 采购单 / 异常日志
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 段二：数据规模与库结构 -->
+    <section class="section">
+      <div class="sec-hd">
+        <span class="sec-num">2</span>
+        <h2 class="sec-title">数据规模与库结构</h2>
+        <span class="sec-sub">确定性 seed=2026 生成 · 跨场景演示全链路能力</span>
+      </div>
+      <table>
+        <thead>
+          <tr><th style="width:30%">场景库 / 表</th><th>核心字段</th><th class="num" style="width:100px">行数</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mono">scenario_goods.fact_sku_daily</td><td>sku_id, channel_id, d, exposure, clicks, conversions, gmv</td><td class="num">119,370</td></tr>
+          <tr><td class="mono">scenario_goods.fact_channel_daily</td><td>channel_id, d, exposure, clicks, conversions, gmv</td><td class="num">600</td></tr>
+          <tr><td class="mono">scenario_goods.dim_sku / dim_channel / dim_category / dim_brand / dim_date</td><td>SKU 200、渠道 6、类目 5、品牌 5、日期 100</td><td class="num">316</td></tr>
+          <tr><td class="mono">scenario_goods.creative_change_log / sku_offline_log / promotion_calendar</td><td>素材更换 1 条、下架 5 条、促销 2 条</td><td class="num">8</td></tr>
+          <tr style="background: #f9fbfc;"><td class="mono">scenario_inventory.fact_inventory_daily</td><td>sku_id, wh_id, d, stock_qty, inbound, outbound, turnover_days</td><td class="num">30,000</td></tr>
+          <tr style="background: #f9fbfc;"><td class="mono">scenario_inventory.sales_daily</td><td>sku_id, wh_id, d, sales_qty</td><td class="num">30,000</td></tr>
+          <tr style="background: #f9fbfc;"><td class="mono">scenario_inventory.dim_warehouse / dim_sku / dim_date</td><td>仓库 3、SKU 100、日期 100</td><td class="num">203</td></tr>
+          <tr style="background: #f9fbfc;"><td class="mono">scenario_inventory.purchase_order / stock_anomaly_log</td><td>采购单 2 条（含 ETA 滞后）、异常事件 12 条</td><td class="num">14</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 段三：演示入口 -->
+    <section class="section">
+      <div class="sec-hd">
+        <span class="sec-num">3</span>
+        <h2 class="sec-title">演示入口与操作步骤</h2>
+        <span class="sec-sub">登录 → 选场景 → 提问 → 看到基于真实数据的六段式归因</span>
+      </div>
+      <div class="flow">
+        <div class="step">
+          <div class="n">1</div>
+          <h4 class="t">登录工作台</h4>
+          <p class="d">用 admin / admin123 登录，能看到预置的两组演示会话。</p>
+          <div class="example">http://localhost:8080</div>
+        </div>
+        <div class="step">
+          <div class="n">2</div>
+          <h4 class="t">打开演示会话</h4>
+          <p class="d">左侧会话列表直接选"商品目录优化"或"库存异常分析"，回放历史消息 + 六段式结果。</p>
+        </div>
+        <div class="step">
+          <div class="n">3</div>
+          <h4 class="t">发起追问</h4>
+          <p class="d">底部输入框直接追问：</p>
+          <div class="example">6 月各渠道降幅排序？谁是主因？</div>
+        </div>
+        <div class="step">
+          <div class="n">4</div>
+          <h4 class="t">实时观察</h4>
+          <p class="d">右侧任务区显示工具执行与步骤进度；结果区实时渲染六段式结论（基于真实数据）。</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer-note">© 2026 经营归因分析系统 · 演示场景介绍 · 由 麻薯 生成</div>
+  </main>
+</div>
+</body>
+</html>
