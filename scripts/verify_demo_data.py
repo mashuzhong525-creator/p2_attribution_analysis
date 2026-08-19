@@ -18,7 +18,8 @@ PASS = os.environ.get("BIA_PASS", "analyst123")
 NEW_PASS = os.environ.get("BIA_NEW_PASS", "Demo@2026")
 REDIRECT = "http://localhost:8080/auth/callback"
 
-client = httpx.Client(base_url=BASE, timeout=15.0)
+# trust_env=False：忽略系统/环境代理，确保本机直连测试目标（Windows 系统代理会劫持 localhost 请求返回 502）
+client = httpx.Client(base_url=BASE, timeout=15.0, trust_env=False)
 
 
 def fail(msg: str) -> None:
@@ -29,11 +30,16 @@ def fail(msg: str) -> None:
 def main() -> None:
     print(f"== 演示数据接口验证：{BASE}  user={USER}")
 
-    # 1. 登录拿授权码
-    r = client.post("/api/auth/login", json={"username": USER, "password": PASS})
+    # 1. 登录拿授权码：优先初始口令；若上次运行已完成改密则自动改用 NEW_PASS 自愈
+    pass_used = PASS
+    r = client.post("/api/auth/login", json={"username": USER, "password": pass_used})
+    if r.status_code != 200 or not r.json().get("code"):
+        pass_used = NEW_PASS
+        r = client.post("/api/auth/login", json={"username": USER, "password": pass_used})
     code = r.json().get("code")
     if r.status_code != 200 or not code:
-        fail(f"登录失败 status={r.status_code} body={r.text[:200]}")
+        fail(f"登录失败 status={r.status_code} pass_used={pass_used} body={r.text[:200]}")
+    print(f"[INFO] 登录成功 pass_used={pass_used}")
 
     def exchange(c: str) -> str:
         r = client.post("/api/auth/token", json={
@@ -48,14 +54,14 @@ def main() -> None:
     token = exchange(code)
     headers = {"Authorization": f"Bearer {token}"}
 
-    # 2. 首次登录改密（若标记未清）
+    # 2. 首次登录改密（若标记未清；改密后按新口令重新登录）
     me = client.get("/api/auth/me", headers=headers).json()
     if me.get("must_change_password"):
         r = client.post("/api/auth/change-password", headers=headers,
-                        json={"old_password": PASS, "new_password": NEW_PASS})
+                        json={"old_password": pass_used, "new_password": NEW_PASS})
         if r.status_code != 200:
             fail(f"首次改密失败 status={r.status_code} body={r.text[:200]}")
-        print(f"[INFO] analyst 已完成首次改密：{PASS} -> {NEW_PASS}")
+        print(f"[INFO] analyst 已完成首次改密：{pass_used} -> {NEW_PASS}")
         code = client.post("/api/auth/login", json={"username": USER, "password": NEW_PASS}).json().get("code")
         headers = {"Authorization": f"Bearer {exchange(code)}"}
 

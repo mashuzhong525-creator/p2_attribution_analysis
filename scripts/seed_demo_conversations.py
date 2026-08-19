@@ -276,8 +276,10 @@ def seed_demo(s) -> None:
         # 本地脚本适配：data_sources.host 存的是容器内主机名(mysql)，本地直连需换回 settings
         ds_goods.host = settings.DB_HOST
         ds_inv.host = settings.DB_HOST
-        six_goods, steps_goods = loop.run_until_complete(analyze_goods(ds_goods))
-        six_inv, steps_inv = loop.run_until_complete(analyze_inventory(ds_inv))
+        # 必须传入演示问题 query：分析器按 query 做场景语义判定（_in_scope），
+        # 缺省空串会走 out_of_scope 分支导致六段式 key_metrics/evidence_list 为空数组
+        six_goods, steps_goods = loop.run_until_complete(analyze_goods(ds_goods, query=GOODS_USER_Q))
+        six_inv, steps_inv = loop.run_until_complete(analyze_inventory(ds_inv, query=INV_USER_Q))
     finally:
         loop.close()
 
