@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     APP_ENV: Literal["dev", "prod", "test"] = "dev"
     API_PREFIX: str = "/api/v1"
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:8080"]
+    # Secure Cookie 开关：None=跟随 APP_ENV（prod 时 Secure，dev 时不 Secure）。
+    # 云上 http 直连（无 HTTPS 网关）时必须显式设 COOKIE_SECURE=false，
+    # 否则浏览器在非 HTTPS/非 localhost 连接下拒绝保存会话 Cookie，登录必然失效。
+    COOKIE_SECURE: bool | None = None
 
     # ---- 数据库（异步，asyncmy 驱动；2C2G 保守连接池）----
     DB_HOST: str = "mysql"

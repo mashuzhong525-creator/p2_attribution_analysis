@@ -51,11 +51,19 @@ class ChangePasswordIn(BaseModel):
 
 
 def _set_cookie(resp: Response, token: str) -> None:
+    # secure 优先级：显式配置 COOKIE_SECURE > 跟随 APP_ENV（prod 时 Secure）
+    # 云上 http 直连（无 HTTPS 网关）时必须在 .env 设 COOKIE_SECURE=false，
+    # 否则浏览器在非 HTTPS/非 localhost 连接下拒绝保存会话 Cookie，登录失效。
+    secure = (
+        settings.COOKIE_SECURE
+        if settings.COOKIE_SECURE is not None
+        else settings.APP_ENV == "prod"
+    )
     resp.set_cookie(
         _COOKIE,
         token,
         httponly=True,
-        secure=settings.APP_ENV == "prod",
+        secure=secure,
         samesite="lax",
         path="/",
         max_age=settings.JWT_EXPIRE_SECONDS,
