@@ -60,6 +60,7 @@ services:
     build: .
     environment:
       APP_ENV: ${APP_ENV:-prod}
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
       DB_HOST: mysql
       DB_PORT: 3306
       DB_USER: ${DB_USER:-bia}
